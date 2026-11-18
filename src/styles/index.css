@@ -1,0 +1,37 @@
+@import 'tailwindcss';
+
+/*
+ * Theme foundation (Task 1 only).
+ * Dark mode is class-based: add the `dark` class to <html> to switch.
+ * The full design system (tokens, components) belongs to a later task.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Lime Green primary accent */
+  --color-primary-50: var(--color-lime-50);
+  --color-primary-100: var(--color-lime-100);
+  --color-primary-200: var(--color-lime-200);
+  --color-primary-300: var(--color-lime-300);
+  --color-primary-400: var(--color-lime-400);
+  --color-primary-500: var(--color-lime-500);
+  --color-primary-600: var(--color-lime-600);
+  --color-primary-700: var(--color-lime-700);
+  --color-primary-800: var(--color-lime-800);
+  --color-primary-900: var(--color-lime-900);
+  --color-primary-950: var(--color-lime-950);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-dvh bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  }
+}
