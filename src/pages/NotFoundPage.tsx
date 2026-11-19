@@ -13,7 +13,7 @@ function NotFoundPage() {
       />
       <Link
         to={ROUTES.dashboard}
-        className="font-medium text-primary-700 underline underline-offset-4 dark:text-primary-400"
+        className="focus-ring w-fit rounded-xs font-medium text-accent underline underline-offset-4"
       >
         Back to Dashboard
       </Link>

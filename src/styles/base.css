@@ -1,0 +1,94 @@
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+
+  /* Visible keyboard focus everywhere by default */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Prevent transition flashes while switching themes */
+  .theme-switching,
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+  }
+}
+
+/* Native <dialog> enter animation (no JS needed) */
+@layer components {
+  .fa-dialog {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+    transition:
+      opacity 180ms var(--ease-standard),
+      transform 220ms var(--ease-standard),
+      overlay 220ms allow-discrete,
+      display 220ms allow-discrete;
+  }
+
+  .fa-dialog[open] {
+    opacity: 1;
+    transform: none;
+  }
+
+  @starting-style {
+    .fa-dialog[open] {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
+
+  .fa-dialog::backdrop {
+    background-color: var(--color-overlay);
+    opacity: 0;
+    transition:
+      opacity 180ms var(--ease-standard),
+      overlay 180ms allow-discrete,
+      display 180ms allow-discrete;
+  }
+
+  .fa-dialog[open]::backdrop {
+    opacity: 1;
+  }
+
+  @starting-style {
+    .fa-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

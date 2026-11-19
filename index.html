@@ -3,9 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Fitness AI: your AI-powered fitness companion." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F6F8F4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B0F0E" media="(prefers-color-scheme: dark)" />
     <title>Fitness AI</title>
+    <!--
+      Applies the saved theme before the first paint to avoid a light/dark flash.
+      The storage key must match THEME_STORAGE_KEY in src/constants/theme.ts.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('fitness-ai-theme')
+          var dark =
+            stored === 'dark' ||
+            (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var root = document.documentElement
+          root.classList.toggle('dark', dark)
+          root.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,0 +1,124 @@
+/*
+ * Fitness AI — raw design tokens.
+ * Semantic values per theme. Components never use these directly;
+ * they use the Tailwind utilities mapped in theme.css (bg-surface, text-foreground, …).
+ * `.light` / `.dark` can also be set on any element to force a theme for that subtree.
+ * Contrast pairs were checked against WCAG 2.2 AA (text ≥ 4.5:1, UI/graphics ≥ 3:1).
+ */
+
+:root,
+.light {
+  /* Brand */
+  --fa-lime: #b5ed59;
+
+  /* Surfaces */
+  --fa-background: #f6f8f4;
+  --fa-surface: #ffffff;
+  --fa-surface-elevated: #edf1ea;
+  --fa-surface-muted: #f0f3ed;
+  --fa-hover: rgb(24 34 26 / 0.05);
+  --fa-pressed: rgb(24 34 26 / 0.09);
+  --fa-overlay: rgb(11 15 14 / 0.48);
+
+  /* Text */
+  --fa-foreground: #18221a;
+  --fa-foreground-muted: #5e6d62;
+
+  /* Borders */
+  --fa-border: #dce3d8;
+  --fa-border-strong: #c3cdbf;
+  --fa-input-border: #7c897f;
+
+  /* Primary (lime) */
+  --fa-primary: var(--fa-lime);
+  --fa-primary-hover: #a6e041;
+  --fa-primary-foreground: #18220a;
+  --fa-primary-edge: #93c640;
+  --fa-primary-subtle: #eef9da;
+  --fa-accent: #3f6a0a; /* lime-family text/icon colour readable on light surfaces */
+
+  /* Focus */
+  --fa-ring: #4c7d0e;
+
+  /* Disabled */
+  --fa-disabled: #e6ebe3;
+  --fa-disabled-foreground: #8e9a91;
+
+  /* Status */
+  --fa-success: #157a3c;
+  --fa-success-subtle: #e5f5ea;
+  --fa-warning: #935c05;
+  --fa-warning-subtle: #fbf0d9;
+  --fa-danger: #b42318;
+  --fa-danger-subtle: #fde9e7;
+  --fa-danger-solid: #c81e1e;
+  --fa-danger-solid-hover: #a91818;
+  --fa-on-solid: #ffffff;
+  --fa-info: #1d5bd8;
+  --fa-info-subtle: #e5eefd;
+
+  /* Charts (≥ 3:1 against surface) */
+  --fa-chart-1: #5f9a0e;
+  --fa-chart-2: #0f8f84;
+  --fa-chart-3: #2563eb;
+  --fa-chart-4: #c26a06;
+  --fa-chart-5: #7c3aed;
+
+  /* Elevation */
+  --fa-shadow-card: 0 1px 2px rgb(24 34 26 / 0.04), 0 1px 3px rgb(24 34 26 / 0.06);
+  --fa-shadow-elevated: 0 4px 12px -2px rgb(24 34 26 / 0.08), 0 2px 4px rgb(24 34 26 / 0.04);
+  --fa-shadow-dialog: 0 24px 48px -12px rgb(24 34 26 / 0.24);
+
+  color-scheme: light;
+}
+
+.dark {
+  --fa-background: #0b0f0e;
+  --fa-surface: #171d1a;
+  --fa-surface-elevated: #202923;
+  --fa-surface-muted: #1c231f;
+  --fa-hover: rgb(245 247 244 / 0.06);
+  --fa-pressed: rgb(245 247 244 / 0.1);
+  --fa-overlay: rgb(0 0 0 / 0.64);
+
+  --fa-foreground: #f5f7f4;
+  --fa-foreground-muted: #a0ada3;
+
+  --fa-border: #263029;
+  --fa-border-strong: #364139;
+  --fa-input-border: #687869;
+
+  --fa-primary-hover: #c6f27e;
+  --fa-primary-foreground: #0e1505;
+  --fa-primary-edge: transparent;
+  --fa-primary-subtle: #1e2a12;
+  --fa-accent: #b5ed59;
+
+  --fa-ring: #b5ed59;
+
+  --fa-disabled: #1f2622;
+  --fa-disabled-foreground: #5f6b63;
+
+  --fa-success: #5cd68a;
+  --fa-success-subtle: #13271b;
+  --fa-warning: #f2c14e;
+  --fa-warning-subtle: #2a2313;
+  --fa-danger: #ff8a80;
+  --fa-danger-subtle: #2e1716;
+  --fa-danger-solid: #dc2626;
+  --fa-danger-solid-hover: #b91c1c;
+  --fa-info: #6cb4ff;
+  --fa-info-subtle: #122338;
+
+  --fa-chart-1: #b5ed59;
+  --fa-chart-2: #4fd1c5;
+  --fa-chart-3: #6cb4ff;
+  --fa-chart-4: #f6ad55;
+  --fa-chart-5: #c3a1f7;
+
+  --fa-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  --fa-shadow-elevated: 0 8px 20px -4px rgb(0 0 0 / 0.45);
+  --fa-shadow-dialog: 0 24px 64px -12px rgb(0 0 0 / 0.7);
+
+  color-scheme: dark;
+}
