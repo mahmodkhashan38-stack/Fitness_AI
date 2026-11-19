@@ -1,6 +1,8 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
-import RootLayout from '@/components/layout/RootLayout'
+import AppShell from '@/components/layout/AppShell'
+import PublicLayout from '@/components/layout/PublicLayout'
 import RouteLoader from '@/components/layout/RouteLoader'
+import { NAV_ITEMS } from '@/constants/navigation'
 import { DEV_ROUTES, ROUTES } from '@/constants/routes'
 import AiCoachPage from '@/pages/AiCoachPage'
 import DashboardPage from '@/pages/DashboardPage'
@@ -12,6 +14,9 @@ import ProgressPage from '@/pages/ProgressPage'
 import RegisterPage from '@/pages/RegisterPage'
 import SettingsPage from '@/pages/SettingsPage'
 import WorkoutsPage from '@/pages/WorkoutsPage'
+import type { AppRouteHandle } from '@/types/navigation'
+
+const handle = (title: string): AppRouteHandle => ({ title })
 
 /**
  * Development-only routes. `import.meta.env.DEV` is `false` in production builds,
@@ -21,6 +26,7 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
   ? [
       {
         path: DEV_ROUTES.designSystem,
+        handle: handle('Design System'),
         HydrateFallback: RouteLoader,
         lazy: async () => ({
           Component: (await import('@/dev/design-system/DesignSystemPage')).default,
@@ -30,21 +36,28 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
   : []
 
 export const router = createBrowserRouter([
+  // Public pages: minimal layout, no app navigation.
+  {
+    element: <PublicLayout />,
+    children: [
+      { path: ROUTES.login, element: <LoginPage />, handle: handle('Log in') },
+      { path: ROUTES.register, element: <RegisterPage />, handle: handle('Create account') },
+    ],
+  },
+  // App pages: sidebar / bottom navigation shell.
   {
     path: ROUTES.dashboard,
-    element: <RootLayout />,
+    element: <AppShell />,
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: ROUTES.login, element: <LoginPage /> },
-      { path: ROUTES.register, element: <RegisterPage /> },
-      { path: ROUTES.workouts, element: <WorkoutsPage /> },
-      { path: ROUTES.nutrition, element: <NutritionPage /> },
-      { path: ROUTES.aiCoach, element: <AiCoachPage /> },
-      { path: ROUTES.progress, element: <ProgressPage /> },
-      { path: ROUTES.profile, element: <ProfilePage /> },
-      { path: ROUTES.settings, element: <SettingsPage /> },
+      { index: true, element: <DashboardPage />, handle: handle(NAV_ITEMS.dashboard.label) },
+      { path: ROUTES.workouts, element: <WorkoutsPage />, handle: handle(NAV_ITEMS.workouts.label) },
+      { path: ROUTES.nutrition, element: <NutritionPage />, handle: handle(NAV_ITEMS.nutrition.label) },
+      { path: ROUTES.aiCoach, element: <AiCoachPage />, handle: handle(NAV_ITEMS.aiCoach.label) },
+      { path: ROUTES.progress, element: <ProgressPage />, handle: handle(NAV_ITEMS.progress.label) },
+      { path: ROUTES.profile, element: <ProfilePage />, handle: handle(NAV_ITEMS.profile.label) },
+      { path: ROUTES.settings, element: <SettingsPage />, handle: handle(NAV_ITEMS.settings.label) },
       ...devRoutes,
-      { path: '*', element: <NotFoundPage /> },
+      { path: '*', element: <NotFoundPage />, handle: handle('Page not found') },
     ],
   },
 ])

@@ -92,3 +92,29 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Native popover (account menu) enter animation */
+@layer components {
+  .fa-popover {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top right;
+    transition:
+      opacity 150ms var(--ease-standard),
+      transform 150ms var(--ease-standard),
+      overlay 150ms allow-discrete,
+      display 150ms allow-discrete;
+  }
+
+  .fa-popover:popover-open {
+    opacity: 1;
+    transform: none;
+  }
+
+  @starting-style {
+    .fa-popover:popover-open {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+}

@@ -1,8 +1,10 @@
-import { Bot } from 'lucide-react'
 import PlaceholderPage from '@/components/ui/PlaceholderPage'
+import { NAV_ITEMS } from '@/constants/navigation'
+
+const page = NAV_ITEMS.aiCoach
 
 function AiCoachPage() {
-  return <PlaceholderPage title="AI Coach" icon={Bot} />
+  return <PlaceholderPage title={page.label} description={page.description} icon={page.icon} />
 }
 
 export default AiCoachPage

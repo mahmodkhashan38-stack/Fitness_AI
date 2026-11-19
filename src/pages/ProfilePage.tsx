@@ -1,8 +1,10 @@
-import { User } from 'lucide-react'
 import PlaceholderPage from '@/components/ui/PlaceholderPage'
+import { NAV_ITEMS } from '@/constants/navigation'
+
+const page = NAV_ITEMS.profile
 
 function ProfilePage() {
-  return <PlaceholderPage title="Profile" icon={User} />
+  return <PlaceholderPage title={page.label} description={page.description} icon={page.icon} />
 }
 
 export default ProfilePage

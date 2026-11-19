@@ -1,8 +1,10 @@
-import { TrendingUp } from 'lucide-react'
 import PlaceholderPage from '@/components/ui/PlaceholderPage'
+import { NAV_ITEMS } from '@/constants/navigation'
+
+const page = NAV_ITEMS.progress
 
 function ProgressPage() {
-  return <PlaceholderPage title="Progress" icon={TrendingUp} />
+  return <PlaceholderPage title={page.label} description={page.description} icon={page.icon} />
 }
 
 export default ProgressPage
