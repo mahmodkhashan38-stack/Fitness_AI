@@ -1,5 +1,6 @@
 import { Outlet, Link, ScrollRestoration } from 'react-router'
 import BrandLogo from '@/components/layout/BrandLogo'
+import RouteContentBoundary from '@/components/layout/RouteContentBoundary'
 import { ThemeToggleButton } from '@/components/ui'
 import { ROUTES } from '@/constants/routes'
 import { useDocumentTitle, usePageTitle } from '@/hooks/usePageTitle'
@@ -23,7 +24,9 @@ function PublicLayout() {
         className="flex flex-1 items-start justify-center px-4 py-8 sm:items-center sm:px-6 sm:py-12"
       >
         <div className="w-full max-w-md">
-          <Outlet />
+          <RouteContentBoundary>
+            <Outlet />
+          </RouteContentBoundary>
         </div>
       </main>
 

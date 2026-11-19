@@ -27,7 +27,8 @@ src/
 ├── features/       Feature modules: auth, dashboard, workouts, nutrition, ai-coach, progress
 ├── components/
 │   ├── ui/         Design system components
-│   └── layout/     App shell (sidebar, bottom navigation, header) and public layout
+│   ├── layout/     App shell (sidebar, bottom navigation, header) and public layout
+│   └── feedback/   Error boundary, error alert and loading states
 ├── hooks/          Shared hooks and shared-state contexts (useTheme, usePersistentState)
 ├── services/       Shared data access: typed API client (services/api)
 ├── types/          Shared types; domain models in types/models/
@@ -39,7 +40,7 @@ src/
 └── main.tsx
 ```
 
-Architecture, layer rules, state management and the API layer: [docs/architecture.md](docs/architecture.md).
+Architecture, layer rules, state management, the API layer, and error/loading handling: [docs/architecture.md](docs/architecture.md).
 
 ## Environment
 

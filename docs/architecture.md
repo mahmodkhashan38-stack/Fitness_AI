@@ -1,7 +1,7 @@
 # Fitness AI — Frontend Architecture
 
-Status: FIT-5 (Sprint 1). Describes how the code is organised, where state lives and how the app
-talks to the API. Global error/loading handling (FIT-6) is not covered yet.
+Status: FIT-6 (Sprint 1). Describes how the code is organised, where state lives, how the app
+talks to the API, and how errors and loading states are handled.
 
 > **There is no backend yet.** The API client is infrastructure only; no feature calls it so far.
 
@@ -12,7 +12,7 @@ src/
 ├── app/          App entry: providers, router, route layouts wiring
 ├── pages/        Thin route entry points (one per route)
 ├── features/     Feature modules (code used by one feature only)
-├── components/   Shared UI: design system (ui/) and app shell (layout/)
+├── components/   Shared UI: design system (ui/), app shell (layout/), error & loading (feedback/)
 ├── hooks/        Shared hooks and shared-state contexts (e.g. useTheme)
 ├── services/     Shared data access: the API client (services/api)
 ├── utils/        Pure helpers (storage, cn, createStrictContext …)
@@ -220,11 +220,142 @@ explicitly. Token storage, refresh and attaching credentials will be designed in
 
 - JSON-only: request bodies are always JSON (no `FormData` uploads yet, e.g. for food photos);
   successful responses must be JSON or empty.
-- No retries, request deduplication or caching.
+- No retries, request deduplication or caching. For user-facing errors see section 4.
 - `fetch` default credentials (`same-origin`); cookie vs. token auth is undecided.
 - No backend exists; nothing in the app calls the client yet.
 
-## 4. Domain models
+## 4. Errors and loading
+
+### Error boundaries
+
+`components/feedback/ErrorBoundary.tsx` is a small class component (no library). It catches errors
+thrown **while rendering** its children (render, lifecycle methods, constructors) and shows a fallback.
+Props: `fallback` (element or `({ error, reset }) => ReactNode`), `resetKeys`, `onError`, `onReset`.
+
+Error boundaries do **not** catch:
+- errors in event handlers (`onClick` …);
+- asynchronous errors (promises, `fetch`, timers), including everything from `apiClient`;
+- errors in the boundary itself, or during server rendering.
+
+Handle those with `try/catch` or `useAsyncTask` and show them with `<ErrorAlert>` (below).
+
+Where boundaries are placed (three layers, not one per component):
+
+| Layer | Where | Catches | User sees |
+|---|---|---|---|
+| Page content | `RouteContentBoundary` around `<Outlet/>` in AppShell and PublicLayout | A page crashing while rendering | Fallback **inside** the shell (navigation keeps working) with *Try again* and *Go to Dashboard*. Navigating to another path resets it. |
+| Layout routes | `errorElement: <RouteErrorFallback/>` on both layout routes | A layout crashing; future loader/action errors | Full-page fallback with *Reload page* and *Go to Dashboard*. Replaces React Router's default screen, which showed stack traces. |
+| App | `ErrorBoundary` in `App.tsx` around providers + router | Anything above the routes (e.g. a provider) | Full-page "couldn't start" with *Reload page*. |
+
+Why both a content boundary and `errorElement`: React Router's error state cannot be cleared for a render
+error by re-navigating to the same URL, so a router fallback can't offer a working *Try again*. The class
+boundary can (it simply re-renders), while `errorElement` remains the safety net for layouts and loaders.
+
+Fallbacks (`ErrorFallback`) never show error details in production. In development a collapsed
+"Technical details" panel shows only `name: message` (no stack). React itself still reports caught errors
+to the browser console for developers; a future monitoring service would hook into `onError` or
+React's `createRoot` `onCaughtError`, and must not send personal data. Route and app fallbacks move focus
+to themselves so keyboard and screen-reader users notice the change.
+
+Use additional boundaries sparingly, for independent sections of a future screen (e.g. a chart that may fail
+while the rest of the dashboard works): `<ErrorBoundary><Chart/></ErrorBoundary>`.
+
+### Recoverable errors (API and async)
+
+```
+ApiError / unknown error ──getErrorFeedback()──▶ ErrorFeedback ──▶ <ErrorAlert>
+      (services/api)                             (types/feedback)   (components/feedback)
+```
+
+- `getErrorFeedback(error)` (in `services/api/error-feedback.ts`) maps any thrown value to fixed, safe copy:
+  `{ title, message, canRetry, severity }`. It never includes the error message, URL, status code or
+  response body. It returns **`null` for intentional cancellations** (`ApiError` `aborted`, `AbortError`):
+  show nothing for those.
+
+  | Error | Title | Retry |
+  |---|---|---|
+  | `network` | You appear to be offline | yes |
+  | `timeout` | This is taking too long | yes |
+  | `http` 400/422 | Something needs your attention | no |
+  | `http` 401 / 403 / 404 | Please sign in again / Access denied / Not found | no |
+  | `http` 408, 429 | Please wait a moment | yes |
+  | `http` 5xx | Something went wrong on our side | yes |
+  | `parse` | Unexpected response | yes |
+  | `config` | Not available yet | no |
+  | other `Error`s | Something went wrong | yes |
+
+- `<ErrorAlert feedback onRetry? retrying? onDismiss?>` renders an announced (`role="alert"`) Alert.
+  The *Try again* button appears only when an `onRetry` callback is given **and** the error is retryable.
+  Nothing retries automatically. Shared UI only knows the `ErrorFeedback` type, not the API layer.
+- Field-level validation messages (e.g. from a 422 body) are the responsibility of the feature's form,
+  which can read `ApiError.body` and map it explicitly.
+- There is no global toast system; errors are shown next to the content they affect.
+
+### Async state
+
+`types/async.ts`:
+
+```ts
+type AsyncState<T> =
+  | { status: 'idle' } | { status: 'loading' } | { status: 'success'; data: T } | { status: 'error'; error: unknown }
+```
+
+`hooks/useAsyncTask(task)` returns `{ state, run, retry, cancel, reset }`. The task receives an
+`AbortSignal` (pass it to `apiClient`).
+
+- **Latest call wins:** `run` aborts the previous call; late results of superseded calls are ignored.
+- **No stale state:** starting a call clears the previous error/data; success never shows an old error.
+- **Cancellation:** `cancel()` aborts and returns to `idle`, never `error`.
+- **Unmount:** the running call is aborted and no state is set afterwards.
+- **Retry:** `retry()` re-runs with the last arguments, only when called (e.g. from *Try again*).
+- `run` never rejects; errors live in `state`.
+
+```tsx
+const { state, run, retry } = useAsyncTask((signal, range: Range) => listWorkouts(range, signal))
+useEffect(() => { void run(range) }, [run, range])
+const feedback = state.status === 'error' ? getErrorFeedback(state.error) : null
+
+<section aria-busy={state.status === 'loading'}>
+  {state.status === 'loading' && <LoadingState label="Loading workouts…" />}
+  {feedback && <ErrorAlert feedback={feedback} onRetry={retry} />}
+  {state.status === 'success' && <WorkoutList workouts={state.data} />}
+</section>
+```
+
+This hook is intentionally small (no caching, deduplication or background refetch). If several screens
+need shared, cached server data, adopt a data-fetching library then, rather than growing this hook.
+
+### Loading patterns
+
+| Need | Use |
+|---|---|
+| Inline ("Saving…" next to content) | `<LoadingState variant="inline" />` |
+| A section/card | `<LoadingState variant="section" />` (reserves height) or `<Skeleton>` shapes matching the final layout |
+| Main content area | `<LoadingState variant="page" />` (also used by `RouteLoader`) |
+| A button action | `<Button loading loadingText="Saving…">` (stays focusable, `aria-busy`) |
+
+Rules: one indicator per region (don't combine a skeleton and a spinner for the same content); set
+`aria-busy="true"` on the region being loaded; `LoadingState` provides a single polite status message
+(the spinner is decorative); skeletons are `aria-hidden`, so pair them with an `sr-only` status text.
+All spinners and skeleton pulses stop animating under `prefers-reduced-motion` (rule in `styles/base.css`).
+
+### Route loading (decision)
+
+Feature routes are **not** lazy-loaded. The pages are small placeholders; splitting them would add a network
+round-trip and a loading flash on every first visit without reducing the initial bundle meaningfully
+(it is dominated by React, React Router and icons). Revisit per route when a screen pulls in heavy code
+(e.g. a charting library). The development-only `/design-system` route stays lazy (with `RouteLoader`)
+so it never reaches production.
+
+### Responsibilities of future feature screens
+
+- Fetch through a feature service + `useAsyncTask` (or a data library later); pass the `signal`.
+- Show loading with the patterns above; show errors with `getErrorFeedback` + `ErrorAlert`.
+- Provide *Try again* only when repeating the action makes sense; never auto-retry.
+- Don't show cancellations; don't show raw error messages, status codes or response bodies.
+- Wrap independently failing sections in their own `ErrorBoundary` only when useful.
+
+## 5. Domain models
 
 `src/types/models/` holds preliminary frontend contracts (not final backend schemas):
 `User`, `Workout` / `Exercise` / `ExerciseSet`, `NutritionEntry`, `BodyMeasurement`, `CoachMessage`.
@@ -234,7 +365,7 @@ explicitly. Token storage, refresh and attaching credentials will be designed in
 - Dates: `IsoDate` (`YYYY-MM-DD`) for calendar days, `IsoDateTime` for instants.
 - Import models from their file, e.g. `import type { Workout } from '@/types/models/workout'`.
 
-## 5. Testing
+## 6. Testing
 
 `npm test` runs Vitest (jsdom + React Testing Library). Tests sit next to the code they cover
 (`*.test.ts(x)`); cross-cutting examples live in `src/test/`. Test-only components never ship.

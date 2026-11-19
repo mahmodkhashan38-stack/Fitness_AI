@@ -1,6 +1,7 @@
 import { Outlet, ScrollRestoration } from 'react-router'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNavigation from '@/components/layout/BottomNavigation'
+import RouteContentBoundary from '@/components/layout/RouteContentBoundary'
 import Sidebar from '@/components/layout/Sidebar'
 import { useDocumentTitle, usePageTitle } from '@/hooks/usePageTitle'
 
@@ -31,7 +32,9 @@ function AppShell() {
           tabIndex={-1}
           className="mx-auto w-full max-w-page flex-1 px-[max(1rem,env(safe-area-inset-left))] pt-6 pb-[calc(var(--spacing-bottom-nav)+env(safe-area-inset-bottom)+2rem)] outline-none sm:px-6 md:px-6 md:pt-8 md:pb-12 lg:px-8"
         >
-          <Outlet />
+          <RouteContentBoundary>
+            <Outlet />
+          </RouteContentBoundary>
         </main>
       </div>
 
