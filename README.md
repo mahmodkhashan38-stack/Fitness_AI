@@ -29,7 +29,7 @@ src/
 │   ├── ui/         Design system components
 │   └── layout/     App shell (sidebar, bottom navigation, header) and public layout
 ├── hooks/          Shared hooks and shared-state contexts (useTheme, usePersistentState)
-├── services/       Shared data access (FIT-5)
+├── services/       Shared data access: typed API client (services/api)
 ├── types/          Shared types; domain models in types/models/
 ├── utils/          Pure helpers (storage, cn, createStrictContext)
 ├── constants/      Routes, navigation config, theme keys
@@ -39,7 +39,22 @@ src/
 └── main.tsx
 ```
 
-Architecture, layer rules and the state management strategy: [docs/architecture.md](docs/architecture.md).
+Architecture, layer rules, state management and the API layer: [docs/architecture.md](docs/architecture.md).
+
+## Environment
+
+The backend does not exist yet; the app runs fully without any environment variables.
+
+```bash
+cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
+```
+
+| Variable | Description |
+| --- | --- |
+| `VITE_API_BASE_URL` | API base URL, e.g. `http://localhost:3000/api` (dev) or `https://api.example.com/v1` (production). Optional until a backend exists. |
+
+`VITE_*` variables are embedded in the browser bundle and are public. Never put secrets in them.
+`.env.local` and other `.env.*` files are git-ignored; only `.env.example` is committed.
 
 Imports use the `@/` alias for `src/`.
 
