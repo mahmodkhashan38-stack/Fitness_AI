@@ -197,24 +197,26 @@ All state-changing requests go through the CSRF checks. In production, every rou
 | Where | Name | Notes |
 |---|---|---|
 | Render | `NODE_ENV=production`, `TRUST_PROXY_HOPS=1` | in `render.yaml` |
-| Render | `CORS_ORIGIN` | the Worker origin, e.g. `https://fitness-ai.<account>.workers.dev` (CORS + CSRF allowlist) |
+| Render | `CORS_ORIGIN` | the Worker origin, `https://fitness-ai.mhmod-2004-2006.workers.dev` (CORS + CSRF allowlist) |
 | Render | `MONGODB_URI` | **secret**, least-privilege Atlas user (FIT-10) |
 | Render | `PROXY_SECRET` | **secret**, ≥ 32 chars, identical to the Worker secret |
-| Cloudflare Worker | `API_ORIGIN` | public, `wrangler.jsonc` `vars` (the Render URL, https) |
-| Cloudflare Worker | `PROXY_SECRET` | **secret** (`npx wrangler secret put PROXY_SECRET` or dashboard → Variables and Secrets → Secret) |
-| Cloudflare build | `VITE_API_BASE_URL=/api` | public |
+| Cloudflare Worker | `API_ORIGIN` | public, `wrangler.jsonc` `vars`: `https://fitness-ai-api-5te2.onrender.com` |
+| Cloudflare Worker | `PROXY_SECRET` | **secret**, runtime (dashboard → Settings → Variables and Secrets → Add → type Secret, or `npx wrangler secret put PROXY_SECRET`); listed in `wrangler.jsonc` `secrets.required`, so `wrangler deploy` fails until it is set |
+| Cloudflare build | `VITE_API_BASE_URL=/api` | public; committed in `.env.production`. Do not set it as a build variable: Workers Builds (`WORKERS_CI=1`) fails on any other value (`deploy/build-guard.ts`) |
 
 No session secret is needed: tokens are random and looked up by hash, not signed.
 
 ## 7. Deployment instructions (not performed)
 
-1. **Generate the shared secret** locally: `openssl rand -base64 48`. In PowerShell: `[Convert]::ToBase64String((1..48 | % { Get-Random -Max 256 }))`. Store it in a password manager.
+1. **Generate the shared secret** locally with a cryptographic RNG: `openssl rand -base64 48`, or in PowerShell (copies to the clipboard without printing it):
+   `$b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) | Set-Clipboard`.
+   Do not use `Get-Random` (not cryptographically secure). Store it in a password manager.
 2. **Render:** set `PROXY_SECRET` and change `CORS_ORIGIN` to the Worker origin. The Blueprint lists `PROXY_SECRET` with `sync: false`.
 3. **Cloudflare:**
-   - The Worker's name must match `name` in `wrangler.jsonc` (`fitness-ai`); rename one of them if not.
-   - Set `API_ORIGIN` in `wrangler.jsonc` to the real Render URL.
-   - Add the `PROXY_SECRET` secret.
-   - Build settings: build command `npm run build` with `VITE_API_BASE_URL=/api`; deploy command `npx wrangler deploy`.
+   - The Worker's name must match `name` in `wrangler.jsonc` (`fitness-ai`); `workers_dev: true` keeps `https://fitness-ai.mhmod-2004-2006.workers.dev`.
+   - `API_ORIGIN` in `wrangler.jsonc` is `https://fitness-ai-api-5te2.onrender.com`.
+   - Add the `PROXY_SECRET` runtime secret **before pushing** (`secrets.required` makes the deploy fail without it). Do not add `API_ORIGIN` in the dashboard: `vars` replace dashboard variables on every deploy, while secrets are kept.
+   - Build settings: root directory empty, build command `npm run build`, deploy command `npx wrangler deploy` (no extra flags; the pinned devDependency `wrangler` is used). Remove any `VITE_API_BASE_URL` build variable.
 4. Push, then let both services deploy.
 5. **Verify live:**
    - `GET https://<render>/api/auth/me` returns **403**, and `/api/health` returns 200.

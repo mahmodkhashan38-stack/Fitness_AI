@@ -202,8 +202,9 @@ Public preview hosting: **Cloudflare Workers** (static assets + a small Worker f
 Procedures and verification: [FIT-10 report](docs/fit-10-deployment-qa-report.md) (Render, Atlas, security headers) and
 [FIT-11 report](docs/fit-11-auth-qa-report.md) (Workers proxy, authentication), which supersedes FIT-10's frontend hosting.
 
-**Frontend (Cloudflare Workers, `wrangler.jsonc`).** Build command `npm run build` with `VITE_API_BASE_URL=/api`,
-deploy command `npx wrangler deploy`. Static files are served by Workers static assets (free, unlimited);
+**Frontend (Cloudflare Workers, `wrangler.jsonc`).** Build command `npm run build` (`VITE_API_BASE_URL=/api` comes from
+the committed `.env.production`; Workers Builds refuses any other value), deploy command `npx wrangler deploy` (Wrangler
+is a pinned devDependency). `PROXY_SECRET` is listed in `secrets.required`, so a deploy fails until the secret is set. Static files are served by Workers static assets (free, unlimited);
 only `/api/*` runs `worker/index.ts`, which forwards to Render with the shared `PROXY_SECRET` (a Worker secret)
 and the visitor's IP. `API_ORIGIN` in `wrangler.jsonc` must be the Render URL. The build writes `dist/_headers`
 (`deploy/security-headers.ts`): a Content Security Policy allowing only this site and the hashed inline theme script,

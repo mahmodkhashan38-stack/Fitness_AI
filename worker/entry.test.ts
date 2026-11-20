@@ -61,7 +61,20 @@ describe('wrangler.jsonc', () => {
     expect(JSON.stringify(config)).not.toMatch(/PROXY_SECRET"\s*:/)
   })
 
+  it('requires PROXY_SECRET on deploy by name only (no value in the file)', () => {
+    expect(config.secrets).toEqual({ required: ['PROXY_SECRET'] })
+  })
+
+  it('keeps the existing fitness-ai.<account>.workers.dev URL', () => {
+    expect(config.name).toBe('fitness-ai')
+    expect(config.workers_dev).toBe(true)
+    expect(config).not.toHaveProperty('route')
+    expect(config).not.toHaveProperty('routes')
+  })
+
   it('points at an HTTPS API origin', () => {
     expect(parseApiOrigin(vars.API_ORIGIN as string)?.protocol).toBe('https:')
+    // The production Render service (FIT-11 deployment target).
+    expect(vars.API_ORIGIN).toBe('https://fitness-ai-api-5te2.onrender.com')
   })
 })

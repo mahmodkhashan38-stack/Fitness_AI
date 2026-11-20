@@ -5,6 +5,9 @@
   "name": "fitness-ai",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-20",
+  // Keep the existing public URL https://fitness-ai.<account>.workers.dev (explicit; it is also the
+  // default when no routes are configured).
+  "workers_dev": true,
   "assets": {
     "directory": "./dist",
     // Serve files exactly as named. The default ("auto-trailing-slash") answers /index.html with a
@@ -17,9 +20,15 @@
     "run_worker_first": ["/api/*"]
   },
   "vars": {
-    // Public, not a secret: the Render API origin. Change to your service URL.
-    "API_ORIGIN": "https://fitness-ai-api.onrender.com"
+    // Public, not a secret: the Render API origin (production service).
+    "API_ORIGIN": "https://fitness-ai-api-5te2.onrender.com"
+  },
+  // Names only, never values. `wrangler deploy` fails while PROXY_SECRET is not set on the Worker,
+  // so a deploy can never ship a proxy that Render would reject. Set the value in the dashboard
+  // (Settings → Variables and Secrets → Add → type "Secret") or with
+  // `npx wrangler secret put PROXY_SECRET` (prompts for the value; never pass it as an argument).
+  // Secrets survive deploys; `vars` above replace dashboard variables on every deploy.
+  "secrets": {
+    "required": ["PROXY_SECRET"]
   }
-  // PROXY_SECRET is a secret: set it with `npx wrangler secret put PROXY_SECRET` or in the
-  // dashboard (Settings → Variables and Secrets → type "Secret"). Never commit it.
 }
