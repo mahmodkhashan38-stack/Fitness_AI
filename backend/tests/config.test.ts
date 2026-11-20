@@ -21,8 +21,10 @@ describe('loadConfig', () => {
       nodeEnv: 'development',
       isProduction: false,
       mongodbUri: URI,
-      corsOrigins: ['http://localhost:5173'],
+      corsOrigins: ['http://localhost:5173', 'http://localhost:4173'],
       trustProxyHops: 0,
+      proxySecret: undefined,
+      secureCookies: false,
     })
   })
 
@@ -33,11 +35,14 @@ describe('loadConfig', () => {
       PORT: '8080',
       CORS_ORIGIN: 'https://fitness.example.com, https://www.fitness.example.com/',
       TRUST_PROXY_HOPS: '1',
+      PROXY_SECRET: 'test-proxy-secret-0123456789abcdefghijkl',
     })
     expect(config).toMatchObject({
       port: 8080,
       isProduction: true,
       trustProxyHops: 1,
+      proxySecret: 'test-proxy-secret-0123456789abcdefghijkl',
+      secureCookies: true,
       corsOrigins: ['https://fitness.example.com', 'https://www.fitness.example.com'],
     })
   })
@@ -70,7 +75,7 @@ describe('loadConfig', () => {
     expect(problemsFor({ ...base, NODE_ENV: 'staging' })).toEqual([expect.stringContaining('NODE_ENV')])
   })
 
-  const prod = { ...base, NODE_ENV: 'production', TRUST_PROXY_HOPS: '1' }
+  const prod = { ...base, NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', PROXY_SECRET: 'test-proxy-secret-0123456789abcdefghijkl' }
 
   it('requires CORS_ORIGIN in production', () => {
     expect(problemsFor({ ...prod })).toEqual([expect.stringContaining('CORS_ORIGIN is required')])
@@ -146,10 +151,30 @@ describe('loadConfig', () => {
     )
   })
 
+  describe('PROXY_SECRET', () => {
+    const cors = { ...prod, CORS_ORIGIN: 'https://app.example.com' }
+
+    it('is optional outside production', () => {
+      expect(loadConfig(base).proxySecret).toBeUndefined()
+    })
+
+    it('is required in production', () => {
+      const withoutSecret: NodeJS.ProcessEnv = { ...cors }
+      delete withoutSecret.PROXY_SECRET
+      expect(problemsFor(withoutSecret)).toEqual([expect.stringContaining('PROXY_SECRET is required')])
+    })
+
+    it.each(['too-short', 'contains whitespace but is long enough 0123456789'])('rejects weak value %j without echoing it', (secret) => {
+      const problems = problemsFor({ ...cors, PROXY_SECRET: secret })
+      expect(problems).toEqual([expect.stringContaining('PROXY_SECRET must be at least 32 characters')])
+      expect(problems.join()).not.toContain(secret)
+    })
+  })
+
   it('reports every problem at once and keeps secrets out of the message', () => {
     const error = (() => {
       try {
-        loadConfig({ NODE_ENV: 'production', PORT: 'x', MONGODB_URI: 'http://u:hunter2@x', TRUST_PROXY_HOPS: '1' })
+        loadConfig({ NODE_ENV: 'production', PORT: 'x', MONGODB_URI: 'http://u:hunter2@x', TRUST_PROXY_HOPS: '1', PROXY_SECRET: 'test-proxy-secret-0123456789abcdefghijkl' })
       } catch (caught) {
         return caught as ConfigError
       }

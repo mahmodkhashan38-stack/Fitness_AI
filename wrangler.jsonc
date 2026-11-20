@@ -1,0 +1,25 @@
+// Cloudflare Workers deployment of the Fitness AI frontend (FIT-11).
+// Docs: https://developers.cloudflare.com/workers/static-assets/
+{
+  // Must match the Worker's name in the Cloudflare dashboard (Workers Builds checks this).
+  "name": "fitness-ai",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./dist",
+    // Serve files exactly as named. The default ("auto-trailing-slash") answers /index.html with a
+    // 307 to "/", which breaks the service worker install: Workbox precaches /index.html as the
+    // offline app shell. "/" and client-side routes still get index.html from the SPA fallback.
+    "html_handling": "none",
+    // Unknown paths serve index.html (client-side routes, deep links).
+    "not_found_handling": "single-page-application",
+    // Only /api/* runs the Worker script (proxy to Render); static files stay free and unlimited.
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    // Public, not a secret: the Render API origin. Change to your service URL.
+    "API_ORIGIN": "https://fitness-ai-api.onrender.com"
+  }
+  // PROXY_SECRET is a secret: set it with `npx wrangler secret put PROXY_SECRET` or in the
+  // dashboard (Settings → Variables and Secrets → type "Secret"). Never commit it.
+}

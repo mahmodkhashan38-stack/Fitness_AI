@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import AuthProvider from '@/app/providers/AuthProvider'
 import ThemeProvider from '@/app/providers/ThemeProvider'
 
 interface AppProvidersProps {
@@ -14,7 +15,11 @@ interface AppProvidersProps {
  * router hooks. Providers that need the router belong in a route layout (e.g. AppShell).
  */
 function AppProviders({ children }: AppProvidersProps) {
-  return <ThemeProvider>{children}</ThemeProvider>
+  return (
+    <ThemeProvider>
+      <AuthProvider>{children}</AuthProvider>
+    </ThemeProvider>
+  )
 }
 
 export default AppProviders

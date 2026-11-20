@@ -1,4 +1,5 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
+import { GuestOnly, RequireAuth } from '@/app/auth/AuthGate'
 import AppShell from '@/components/layout/AppShell'
 import PublicLayout from '@/components/layout/PublicLayout'
 import RouteErrorFallback from '@/components/layout/RouteErrorFallback'
@@ -44,30 +45,41 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
  * the layouts themselves and future loader/action errors.
  */
 export const routes: RouteObject[] = [
-  // Public pages: minimal layout, no app navigation.
+  // Public pages: minimal layout, no app navigation. Signed-in users are sent to the app.
   {
     element: <PublicLayout />,
     errorElement: <RouteErrorFallback />,
     children: [
-      { path: ROUTES.login, element: <LoginPage />, handle: handle('Log in') },
-      { path: ROUTES.register, element: <RegisterPage />, handle: handle('Create account') },
+      {
+        element: <GuestOnly />,
+        children: [
+          { path: ROUTES.login, element: <LoginPage />, handle: handle('Log in') },
+          { path: ROUTES.register, element: <RegisterPage />, handle: handle('Create account') },
+        ],
+      },
     ],
   },
-  // App pages: sidebar / bottom navigation shell.
+  // App pages: require a session, then the sidebar / bottom navigation shell.
   {
-    path: ROUTES.dashboard,
-    element: <AppShell />,
+    element: <RequireAuth />,
     errorElement: <RouteErrorFallback />,
     children: [
-      { index: true, element: <DashboardPage />, handle: handle(NAV_ITEMS.dashboard.label) },
-      { path: ROUTES.workouts, element: <WorkoutsPage />, handle: handle(NAV_ITEMS.workouts.label) },
-      { path: ROUTES.nutrition, element: <NutritionPage />, handle: handle(NAV_ITEMS.nutrition.label) },
-      { path: ROUTES.aiCoach, element: <AiCoachPage />, handle: handle(NAV_ITEMS.aiCoach.label) },
-      { path: ROUTES.progress, element: <ProgressPage />, handle: handle(NAV_ITEMS.progress.label) },
-      { path: ROUTES.profile, element: <ProfilePage />, handle: handle(NAV_ITEMS.profile.label) },
-      { path: ROUTES.settings, element: <SettingsPage />, handle: handle(NAV_ITEMS.settings.label) },
-      ...devRoutes,
-      { path: '*', element: <NotFoundPage />, handle: handle('Page not found') },
+      {
+        path: ROUTES.dashboard,
+        element: <AppShell />,
+        errorElement: <RouteErrorFallback />,
+        children: [
+          { index: true, element: <DashboardPage />, handle: handle(NAV_ITEMS.dashboard.label) },
+          { path: ROUTES.workouts, element: <WorkoutsPage />, handle: handle(NAV_ITEMS.workouts.label) },
+          { path: ROUTES.nutrition, element: <NutritionPage />, handle: handle(NAV_ITEMS.nutrition.label) },
+          { path: ROUTES.aiCoach, element: <AiCoachPage />, handle: handle(NAV_ITEMS.aiCoach.label) },
+          { path: ROUTES.progress, element: <ProgressPage />, handle: handle(NAV_ITEMS.progress.label) },
+          { path: ROUTES.profile, element: <ProfilePage />, handle: handle(NAV_ITEMS.profile.label) },
+          { path: ROUTES.settings, element: <SettingsPage />, handle: handle(NAV_ITEMS.settings.label) },
+          ...devRoutes,
+          { path: '*', element: <NotFoundPage />, handle: handle('Page not found') },
+        ],
+      },
     ],
   },
 ]

@@ -27,7 +27,7 @@ describe('404 handling', () => {
 
   it('returns 404 for unsupported methods on existing paths', async () => {
     running = await startTestApp()
-    const response = await fetch(`${running.url}/api/health`, { method: 'DELETE' })
+    const response = await fetch(`${running.url}/api/health`, { method: 'DELETE', headers: { Origin: 'http://localhost:5173' } })
     expect(response.status).toBe(404)
   })
 
@@ -46,8 +46,9 @@ describe('404 handling', () => {
 })
 
 describe('request body handling', () => {
+  // A legitimate same-app request: allowed origin (see the CSRF tests for rejected ones).
   const post = (url: string, body: string, contentType = 'application/json') =>
-    fetch(`${url}/api/health`, { method: 'POST', headers: { 'Content-Type': contentType }, body })
+    fetch(`${url}/api/health`, { method: 'POST', headers: { 'Content-Type': contentType, Origin: 'http://localhost:5173' }, body })
 
   it('rejects malformed JSON with 400 INVALID_JSON and no parser details', async () => {
     running = await startTestApp()
@@ -81,7 +82,7 @@ describe('request body handling', () => {
     running = await startTestApp()
     const response = await fetch(`${running.url}/api/health`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'bogus' },
+      headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'bogus', Origin: 'http://localhost:5173' },
       body: '{}',
     })
     expect(response.status).toBe(415)

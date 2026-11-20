@@ -1,7 +1,8 @@
 # Fitness AI
 
-Responsive fitness application (desktop and mobile): a React frontend (repository root) and a
-REST API foundation in [`backend/`](backend). The frontend is an installable Progressive Web App
+Responsive fitness application (desktop and mobile): a React frontend (repository root), a REST API in
+[`backend/`](backend) with email/password accounts, and a Cloudflare Worker ([`worker/`](worker)) that serves the app
+and forwards `/api` in production. The frontend is an installable Progressive Web App
 (iPhone via Safari, Android via Chrome; no app stores).
 
 ## Stack
@@ -123,8 +124,9 @@ cp .env.example .env         # PowerShell: Copy-Item .env.example .env
 | `MONGODB_URI` | Yes | MongoDB connection string (`mongodb+srv://…` for Atlas). Secret. |
 | `PORT` | No | HTTP port, default `3000`. |
 | `NODE_ENV` | No | `development` (default), `test` or `production`. |
-| `CORS_ORIGIN` | In production | Comma-separated exact browser origins allowed to call the API. Development default: `http://localhost:5173`. In production every entry must be `https`; `*` is never accepted. |
+| `CORS_ORIGIN` | In production | Comma-separated exact origins of the app (CORS and the CSRF allowlist). Development default: `http://localhost:5173`. In production every entry must be `https`; `*` is never accepted. |
 | `TRUST_PROXY_HOPS` | In production | Number of reverse proxies in front of the API whose `X-Forwarded-For` entries are trusted (client IP for rate limiting). Default `0` (local). Render: `1`. |
+| `PROXY_SECRET` | In production | Shared secret with the Cloudflare Worker (≥ 32 characters). When set, every request except `GET /api/health` must carry it, so the API is only reachable through the app. Secret. |
 
 The server validates all variables at start-up, prints every problem (never secret values) and exits
 with code 1 if anything is wrong. `backend/.env` is loaded with Node's built-in `process.loadEnvFile`
@@ -178,29 +180,45 @@ with a "Reload to update" notice. API data always needs a connection and is neve
 The service worker only runs in production builds (`npm run build` + `npm run preview`), never in `npm run dev`.
 Details, limitations and test results: [docs/fit-9-pwa-qa-report.md](docs/fit-9-pwa-qa-report.md).
 
+## Authentication
+
+Email and password accounts (FIT-11). Passwords are hashed with Argon2id. The session is a server-side
+record in MongoDB referenced by an `HttpOnly`, `Secure`, `SameSite=Strict` cookie (`__Host-fa_session`), valid
+for 14 days. Nothing auth-related is stored in `localStorage` or readable by JavaScript.
+Endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`,
+`PATCH /api/users/me`. All app pages except Log in and Create account require a session.
+Design, security decisions and test results: [docs/fit-11-auth-qa-report.md](docs/fit-11-auth-qa-report.md).
+
+The API must be **same-origin** with the app for the cookie to work (Safari blocks third-party cookies):
+`/api` through the Vite proxy locally, and through the Cloudflare Worker in production.
+
+Backend tests use a throwaway local MongoDB (`mongodb-memory-server-core`), never Atlas: the first run downloads
+a `mongod` binary (~100 MB, cached), or set `MONGOMS_SYSTEM_BINARY` to an installed `mongod`.
+
 ## Deployment
 
-Public preview hosting (FIT-10): **Cloudflare Pages** (frontend, static) and **Render** (API, free web service),
-with MongoDB Atlas. Configuration lives in the repository, secrets only in the hosts' dashboards.
-Full procedure, URLs, costs, security measures, verification results and rollback:
-[docs/fit-10-deployment-qa-report.md](docs/fit-10-deployment-qa-report.md).
+Public preview hosting: **Cloudflare Workers** (static assets + a small Worker for `/api`) and **Render**
+(API, free web service), with MongoDB Atlas. Secrets live only in the hosts' dashboards.
+Procedures and verification: [FIT-10 report](docs/fit-10-deployment-qa-report.md) (Render, Atlas, security headers) and
+[FIT-11 report](docs/fit-11-auth-qa-report.md) (Workers proxy, authentication), which supersedes FIT-10's frontend hosting.
 
-**Frontend (Cloudflare Pages).** Build command `npm run build`, output `dist`, Node from `.node-version`.
-Set `VITE_API_BASE_URL=https://<api-host>/api` in the Pages build settings (public value). The build writes
-`dist/_headers` (`deploy/security-headers.ts`): a Content Security Policy that allows only this site, the API
-origin and the hashed inline theme script, plus HSTS, frame blocking and caching rules (`sw.js`/`index.html`
-always revalidated, hashed assets immutable). Unknown paths serve `index.html` (SPA fallback, no `404.html`).
+**Frontend (Cloudflare Workers, `wrangler.jsonc`).** Build command `npm run build` with `VITE_API_BASE_URL=/api`,
+deploy command `npx wrangler deploy`. Static files are served by Workers static assets (free, unlimited);
+only `/api/*` runs `worker/index.ts`, which forwards to Render with the shared `PROXY_SECRET` (a Worker secret)
+and the visitor's IP. `API_ORIGIN` in `wrangler.jsonc` must be the Render URL. The build writes `dist/_headers`
+(`deploy/security-headers.ts`): a Content Security Policy allowing only this site and the hashed inline theme script,
+plus HSTS, frame blocking and caching rules (`sw.js`/`index.html` always revalidated, hashed assets immutable).
+`html_handling: "none"` keeps `/index.html` servable for the service worker; unknown paths get `index.html` (SPA fallback).
 
-**Backend (Render).** `render.yaml` (Blueprint) defines the service: `rootDir: backend`, free plan, Frankfurt,
-`npm ci --include=dev && npm run build`, `npm start`, health check `/api/health`, `NODE_ENV=production`,
-`TRUST_PROXY_HOPS=1`. `CORS_ORIGIN` (the Pages origin) and `MONGODB_URI` are entered in the Render dashboard
-(`sync: false`), never committed. The API refuses to start without them, without TLS to MongoDB, or with
-`*`/http origins in production.
+**Backend (Render, `render.yaml`).** `rootDir: backend`, free plan, Frankfurt, `npm ci --include=dev && npm run build`,
+`npm start`, health check `/api/health`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=1`. `CORS_ORIGIN` (the Worker
+origin), `MONGODB_URI` and `PROXY_SECRET` are entered in the Render dashboard (`sync: false`), never committed.
+The API refuses to start without them, without TLS to MongoDB, or with `*`/http origins in production. It creates
+its indexes (unique email, session token, session expiry) at start-up.
 
-**Other hosts** need the same: HTTPS, SPA fallback, the `_headers` rules (or equivalent), `NODE_ENV=production`,
-`MONGODB_URI`, `CORS_ORIGIN`, the correct `TRUST_PROXY_HOPS` for their proxy chain, Atlas network access for the
-API's outbound IPs, and `SIGTERM` before stopping the API (in-flight requests finish within 10 s).
-In production, indexes are not built automatically (`autoIndex` off); create them deliberately when models exist.
+**Other hosts** need the same: HTTPS, the app and `/api` on one origin, the `_headers` rules (or equivalent),
+`NODE_ENV=production`, `MONGODB_URI`, `CORS_ORIGIN`, `PROXY_SECRET` (or another way to restrict direct access),
+the correct `TRUST_PROXY_HOPS`, Atlas network access for the API's outbound IPs, and `SIGTERM` before stopping the API.
 
 ## Notes
 

@@ -6,7 +6,10 @@ export interface AppConfig {
   isProduction: boolean
   /** Never log this value. */
   mongodbUri: string
-  /** Exact browser origins allowed by CORS. */
+  /**
+   * Exact browser origins of the app. Used for CORS and as the CSRF allowlist: state-changing
+   * requests must come from one of these origins.
+   */
   corsOrigins: readonly string[]
   /**
    * Number of reverse proxies in front of the app whose X-Forwarded-For entries are trusted
@@ -15,6 +18,14 @@ export interface AppConfig {
    * rate-limit bucket, so production requires it explicitly.
    */
   trustProxyHops: number
+  /**
+   * Shared secret sent by the Cloudflare Worker that fronts the API (X-Fitness-Proxy-Auth).
+   * When set, every request except GET /api/health must carry it. Required in production.
+   * Never log this value.
+   */
+  proxySecret: string | undefined
+  /** Whether cookies get the Secure flag and the __Host- prefix (production: always). */
+  secureCookies: boolean
 }
 
 /** Thrown when the environment is invalid. Lists every problem; never includes secret values. */
@@ -30,7 +41,9 @@ export class ConfigError extends Error {
 
 const NODE_ENVS: readonly NodeEnvironment[] = ['development', 'test', 'production']
 const DEFAULT_PORT = 3000
-const DEFAULT_DEV_CORS_ORIGIN = 'http://localhost:5173'
+/** Vite dev server and `vite preview`. */
+const DEFAULT_DEV_CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:4173']
+const MIN_PROXY_SECRET_LENGTH = 32
 const MAX_TRUST_PROXY_HOPS = 5
 
 /** Query options that would disable or weaken TLS to MongoDB. */
@@ -96,7 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   let corsOrigins: string[] = []
   if (rawCors === undefined) {
     if (isProduction) problems.push('CORS_ORIGIN is required in production (comma-separated https origins).')
-    else corsOrigins = [DEFAULT_DEV_CORS_ORIGIN]
+    else corsOrigins = [...DEFAULT_DEV_CORS_ORIGINS]
   } else {
     for (const entry of rawCors.split(',').map((value) => value.trim()).filter(Boolean)) {
       if (entry === '*') {
@@ -126,7 +139,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     corsOrigins = [...new Set(corsOrigins)]
   }
 
+  // PROXY_SECRET (value is never echoed)
+  const proxySecret = read(env, 'PROXY_SECRET')
+  if (proxySecret === undefined) {
+    if (isProduction) problems.push('PROXY_SECRET is required in production (shared with the Cloudflare Worker; at least 32 characters).')
+  } else if (proxySecret.length < MIN_PROXY_SECRET_LENGTH || /\s/.test(proxySecret)) {
+    problems.push(`PROXY_SECRET must be at least ${MIN_PROXY_SECRET_LENGTH} characters without whitespace (e.g. \`openssl rand -base64 48\`).`)
+  }
+
   if (problems.length > 0) throw new ConfigError(problems)
 
-  return { port, nodeEnv: nodeEnv ?? 'development', isProduction, mongodbUri, corsOrigins, trustProxyHops }
+  return {
+    port,
+    nodeEnv: nodeEnv ?? 'development',
+    isProduction,
+    mongodbUri,
+    corsOrigins,
+    trustProxyHops,
+    proxySecret,
+    secureCookies: isProduction,
+  }
 }

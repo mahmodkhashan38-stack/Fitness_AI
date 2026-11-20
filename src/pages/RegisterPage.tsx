@@ -1,7 +1,6 @@
 import { UserPlus } from 'lucide-react'
-import { Link } from 'react-router'
 import { Card } from '@/components/ui'
-import { ROUTES } from '@/constants/routes'
+import RegisterForm from '@/features/auth/RegisterForm'
 
 function RegisterPage() {
   return (
@@ -11,16 +10,9 @@ function RegisterPage() {
           <UserPlus className="size-6" />
         </span>
         <h1 className="text-h2 text-foreground">Create account</h1>
-        <p className="text-body text-foreground-muted">
-          Registration is coming in a future sprint. This page uses the public layout, without app navigation.
-        </p>
+        <p className="text-body text-foreground-muted">Create your Fitness AI account to get started.</p>
       </div>
-      <p className="text-body-sm text-foreground-muted">
-        Already have an account?{' '}
-        <Link to={ROUTES.login} className="focus-ring rounded-xs font-semibold text-accent underline-offset-4 hover:underline">
-          Log in
-        </Link>
-      </p>
+      <RegisterForm />
     </Card>
   )
 }

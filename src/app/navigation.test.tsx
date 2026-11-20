@@ -4,12 +4,16 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import ThemeProvider from '@/app/providers/ThemeProvider'
 import { routes } from '@/app/router'
+import type { AuthContextValue } from '@/hooks/useAuth'
+import { createAuthValue, TestAuthProvider } from '@/test/auth'
 
-function renderAt(path: string) {
+function renderAt(path: string, auth: AuthContextValue = createAuthValue()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <TestAuthProvider value={auth}>
+        <RouterProvider router={router} />
+      </TestAuthProvider>
     </ThemeProvider>,
   )
   return router
@@ -103,7 +107,7 @@ describe('navigation (real routes)', () => {
     ['/login', 'Log in'],
     ['/register', 'Create account'],
   ])('public route %s has no app navigation, header menu or sidebar', (path, heading) => {
-    renderAt(path)
+    renderAt(path, createAuthValue({ status: 'unauthenticated' }))
     expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
     expect(screen.queryByRole('navigation')).toBeNull()
     expect(screen.queryByRole('complementary')).toBeNull()
@@ -111,7 +115,7 @@ describe('navigation (real routes)', () => {
   })
 
   it('public pages link to each other', async () => {
-    renderAt('/login')
+    renderAt('/login', createAuthValue({ status: 'unauthenticated' }))
     await act(async () => fireEvent.click(screen.getByRole('link', { name: 'Create an account' })))
     expect(screen.getByRole('heading', { level: 1, name: 'Create account' })).toBeTruthy()
   })

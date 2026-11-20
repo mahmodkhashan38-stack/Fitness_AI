@@ -80,9 +80,3 @@ export const MOBILE_NAV: readonly AppNavId[] = ['progress', 'workouts', 'dashboa
 
 /** The item rendered as the emphasised centre action in the bottom navigation. */
 export const MOBILE_NAV_CENTER: AppNavId = 'dashboard'
-
-/** Placeholder profile shown in the header until authentication exists. */
-export const PLACEHOLDER_PROFILE = {
-  name: 'Alex Carter',
-  detail: 'Placeholder profile',
-} as const

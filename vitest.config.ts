@@ -7,7 +7,7 @@ export default defineConfig((env) =>
     defineConfig({
       test: {
         environment: 'jsdom',
-        include: ['src/**/*.test.{ts,tsx}', 'pwa.config.test.ts', 'deploy/**/*.test.ts'],
+        include: ['src/**/*.test.{ts,tsx}', 'pwa.config.test.ts', 'deploy/**/*.test.ts', 'worker/**/*.test.ts'],
         setupFiles: ['src/test/setup.ts'],
         restoreMocks: true,
       },

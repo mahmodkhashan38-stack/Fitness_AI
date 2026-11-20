@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs'
 import { createApp } from './app.js'
 import { ConfigError, loadConfig } from './config/env.js'
 import { connectDatabase, disconnectDatabase, getDatabaseStatus } from './database/connection.js'
+import { SessionModel } from './models/session.js'
+import { UserModel } from './models/user.js'
 import { createLogger } from './utils/logger.js'
 import { createGracefulShutdown } from './utils/shutdown.js'
 
@@ -28,6 +30,17 @@ async function main(): Promise<void> {
     await connectDatabase(config.mongodbUri, { autoIndex: !config.isProduction, logger })
   } catch (error) {
     logger.error('Startup aborted: could not connect to MongoDB. Check MONGODB_URI, the Atlas network access list and database user.', { error })
+    await disconnectDatabase().catch(() => {})
+    process.exitCode = 1
+    return
+  }
+
+  // autoIndex is off in production, so build the indexes auth depends on (unique email,
+  // unique session token, session TTL) explicitly. Idempotent; needs only readWrite.
+  try {
+    await Promise.all([UserModel.createIndexes(), SessionModel.createIndexes()])
+  } catch (error) {
+    logger.error('Startup aborted: could not create database indexes.', { error })
     await disconnectDatabase().catch(() => {})
     process.exitCode = 1
     return

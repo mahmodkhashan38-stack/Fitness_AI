@@ -1,7 +1,9 @@
-# Render Blueprint for the Fitness AI API (FIT-10).
+# Render Blueprint for the Fitness AI API (FIT-10, FIT-11).
 # Docs: https://render.com/docs/blueprint-spec
-# Secrets (MONGODB_URI) and the deployment-specific CORS origin are NOT stored here:
+# Secrets (MONGODB_URI, PROXY_SECRET) and the deployment-specific app origin are NOT stored here:
 # `sync: false` makes Render ask for them when the Blueprint is created.
+# Since FIT-11 the browser never calls this service directly: the Cloudflare Worker that serves
+# the app forwards /api/* here with PROXY_SECRET (see wrangler.jsonc and worker/).
 services:
   - type: web
     name: fitness-ai-api
@@ -24,8 +26,13 @@ services:
       # Render's load balancer is the single proxy in front of the app.
       - key: TRUST_PROXY_HOPS
         value: "1"
-      # Exact frontend origin(s), e.g. https://fitness-ai.pages.dev (comma-separated, https only).
+      # Exact app origin(s), i.e. the Cloudflare Worker URL, e.g. https://fitness-ai.<account>.workers.dev
+      # (comma-separated, https only). Used for CORS and as the CSRF allowlist.
       - key: CORS_ORIGIN
+        sync: false
+      # Shared secret, identical to the Worker's PROXY_SECRET secret (at least 32 characters,
+      # e.g. `openssl rand -base64 48`). Requests without it are refused (except GET /api/health).
+      - key: PROXY_SECRET
         sync: false
       # Dedicated least-privilege Atlas user, mongodb+srv:// (TLS). Never commit this value.
       - key: MONGODB_URI

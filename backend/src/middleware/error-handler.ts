@@ -2,11 +2,13 @@ import type { ErrorRequestHandler, RequestHandler, Response } from 'express'
 import { HttpError, type ErrorResponseBody } from '../utils/http-error.js'
 import type { Logger } from '../utils/logger.js'
 
-function send(res: Response, status: number, code: string, message: string) {
+export function sendError(res: Response, status: number, code: string, message: string, fields?: Record<string, string>) {
   const requestId = typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined
-  const body: ErrorResponseBody = { error: { code, message, ...(requestId ? { requestId } : {}) } }
+  const body: ErrorResponseBody = { error: { code, message, ...(fields ? { fields } : {}), ...(requestId ? { requestId } : {}) } }
   res.status(status).json(body)
 }
+
+const send = sendError
 
 /** Errors raised by express.json() carry a `type` and `status`. */
 interface BodyParserError {
@@ -40,7 +42,8 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     }
 
     if (error instanceof HttpError) {
-      send(res, error.status, error.code, error.message)
+      if (error.retryAfterSeconds !== undefined) res.set('Retry-After', String(error.retryAfterSeconds))
+      send(res, error.status, error.code, error.message, error.fields ? { ...error.fields } : undefined)
       return
     }
 

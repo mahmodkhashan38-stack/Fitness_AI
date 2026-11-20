@@ -1,8 +1,10 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, LogOut } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
-import { NavLink } from 'react-router'
-import { Avatar, Divider, ThemeToggle } from '@/components/ui'
-import { NAV_ITEMS, PLACEHOLDER_PROFILE, SIDEBAR_SECONDARY_NAV } from '@/constants/navigation'
+import { NavLink, useNavigate } from 'react-router'
+import { Avatar, Divider, Spinner, ThemeToggle } from '@/components/ui'
+import { NAV_ITEMS, SIDEBAR_SECONDARY_NAV } from '@/constants/navigation'
+import { ROUTES } from '@/constants/routes'
+import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/utils/cn'
 
 /** Popover API: Chrome 114, Firefox 125, Safari 17. The default Vite build also targets older browsers. */
@@ -11,14 +13,19 @@ function supportsPopover(): boolean {
 }
 
 /**
- * Profile access in the header (on phones, the only way to Profile and Settings).
- * Placeholder profile data only.
+ * Profile access in the header (on phones, the only way to Profile and Settings),
+ * showing the signed-in user, with Log out.
  *
  * Uses the native Popover API where available: the button toggles it, Esc or an
  * outside click closes it, and focus returns to the button. Browsers without it
  * get the same behaviour from a small disclosure fallback (aria-expanded/controls).
  */
 function AccountMenu() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+  const displayName = user?.name ?? 'Account'
   const popoverId = useId()
   const popoverRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -28,6 +35,20 @@ function AccountMenu() {
   const close = () => {
     if (native) popoverRef.current?.hidePopover()
     else setFallbackOpen(false)
+  }
+
+  const onLogout = async () => {
+    setLogoutError(null)
+    setLoggingOut(true)
+    try {
+      await logout()
+      close()
+      navigate(ROUTES.login, { replace: true })
+    } catch {
+      // The session is still valid on the server; don't pretend the user is logged out.
+      setLogoutError('Couldn’t log out. Check your connection and try again.')
+      setLoggingOut(false)
+    }
   }
 
   // Fallback only: like a native popover, close on Escape (wherever focus is) or an outside click.
@@ -64,9 +85,9 @@ function AccountMenu() {
             })}
         className="focus-ring flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full p-1 transition-colors hover:bg-hover lg:pr-2"
       >
-        <span className="sr-only">Account menu for {PLACEHOLDER_PROFILE.name}</span>
+        <span className="sr-only">Account menu for {displayName}</span>
         <span aria-hidden="true" className="flex">
-          <Avatar name={PLACEHOLDER_PROFILE.name} size="md" className="size-9" />
+          <Avatar name={displayName} size="md" className="size-9" />
         </span>
         <ChevronDown className="hidden size-4 text-foreground-muted lg:block" aria-hidden="true" />
       </button>
@@ -83,10 +104,10 @@ function AccountMenu() {
         )}
       >
         <div className="flex items-center gap-3 px-2 py-2">
-          <Avatar name={PLACEHOLDER_PROFILE.name} size="md" />
+          <Avatar name={displayName} size="md" />
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-label text-foreground">{PLACEHOLDER_PROFILE.name}</span>
-            <span className="truncate text-caption text-foreground-muted">{PLACEHOLDER_PROFILE.detail}</span>
+            <span className="truncate text-label text-foreground">{displayName}</span>
+            {user && <span className="truncate text-caption text-foreground-muted">{user.email}</span>}
           </div>
         </div>
         <Divider className="my-1.5" />
@@ -113,6 +134,26 @@ function AccountMenu() {
             )
           })}
         </ul>
+        <Divider className="my-1.5" />
+        <button
+          type="button"
+          onClick={() => void onLogout()}
+          disabled={loggingOut}
+          aria-busy={loggingOut || undefined}
+          className="focus-ring flex h-11 w-full cursor-pointer items-center gap-3 rounded-control px-2.5 text-label text-foreground transition-colors hover:bg-hover disabled:cursor-wait disabled:opacity-70"
+        >
+          {loggingOut ? (
+            <Spinner size="sm" label={null} />
+          ) : (
+            <LogOut className="size-[1.125rem] text-foreground-muted" aria-hidden="true" />
+          )}
+          {loggingOut ? 'Logging out…' : 'Log out'}
+        </button>
+        {logoutError && (
+          <p role="alert" className="px-2.5 pt-1 pb-1.5 text-body-sm text-danger">
+            {logoutError}
+          </p>
+        )}
         {/* Tablet/desktop have the theme switcher in the header; phones get it here. */}
         <div className="md:hidden">
           <Divider className="my-1.5" />

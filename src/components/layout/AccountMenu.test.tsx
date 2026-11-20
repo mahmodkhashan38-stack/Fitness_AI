@@ -2,7 +2,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AccountMenu from '@/components/layout/AccountMenu'
+import type { AuthContextValue } from '@/hooks/useAuth'
 import { ThemeContext, type ThemeContextValue } from '@/hooks/useTheme'
+import { createAuthValue, TestAuthProvider } from '@/test/auth'
 
 const theme: ThemeContextValue = {
   preference: 'system',
@@ -11,18 +13,21 @@ const theme: ThemeContextValue = {
   toggleTheme: vi.fn(),
 }
 
-function renderMenu() {
+function renderMenu(auth: AuthContextValue = createAuthValue()) {
   const router = createMemoryRouter(
     [
       { path: '/', element: <AccountMenu /> },
       { path: '/profile', element: <p>Profile page</p> },
       { path: '/settings', element: <p>Settings page</p> },
+      { path: '/login', element: <p>Login page</p> },
     ],
     { initialEntries: ['/'] },
   )
   render(
     <ThemeContext.Provider value={theme}>
-      <RouterProvider router={router} />
+      <TestAuthProvider value={auth}>
+        <RouterProvider router={router} />
+      </TestAuthProvider>
     </ThemeContext.Provider>,
   )
   return router
@@ -103,5 +108,36 @@ describe('AccountMenu with the Popover API', () => {
     await act(async () => fireEvent.click(screen.getByRole('link', { name: 'Profile', hidden: true })))
     expect(proto.hidePopover).toHaveBeenCalledTimes(1)
     expect(router.state.location.pathname).toBe('/profile')
+  })
+})
+
+describe('AccountMenu account details and logout', () => {
+  it('shows the signed-in user’s name and email', () => {
+    renderMenu()
+    expect(screen.getByText('Alex Carter', { selector: 'span.truncate' })).toBeTruthy()
+    expect(screen.getByText('alex@example.com')).toBeTruthy()
+  })
+
+  it('logs out on the server, then goes to the login page', async () => {
+    const auth = createAuthValue()
+    const router = renderMenu(auth)
+    fireEvent.click(button())
+    await act(async () => {
+      screen.getByRole('button', { name: 'Log out' }).click()
+    })
+    expect(auth.logout).toHaveBeenCalledTimes(1)
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('stays signed in and explains when logout fails (e.g. offline)', async () => {
+    const auth = createAuthValue({ logout: vi.fn(async () => Promise.reject(new Error('offline'))) })
+    const router = renderMenu(auth)
+    fireEvent.click(button())
+    await act(async () => {
+      screen.getByRole('button', { name: 'Log out' }).click()
+    })
+    expect(router.state.location.pathname).toBe('/')
+    expect(screen.getByRole('alert').textContent).toMatch(/Couldn’t log out/)
+    expect((screen.getByRole('button', { name: 'Log out' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

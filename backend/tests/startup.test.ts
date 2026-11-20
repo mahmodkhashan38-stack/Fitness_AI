@@ -38,6 +38,7 @@ describe('server startup', () => {
     expect(output).toContain('MONGODB_URI is required')
     expect(output).toContain('CORS_ORIGIN is required')
     expect(output).toContain('TRUST_PROXY_HOPS is required')
+    expect(output).toContain('PROXY_SECRET is required')
   })
 
   it('exits with code 1 without leaking credentials when MongoDB is unreachable', async () => {

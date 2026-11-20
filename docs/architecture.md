@@ -1,12 +1,13 @@
 # Fitness AI — Architecture
 
-Status: FIT-10. Sections 1–6 describe the frontend: how the code is organised, where state lives,
+Status: FIT-11. Sections 1–6 describe the frontend: how the code is organised, where state lives,
 how the app talks to the API, and how errors and loading states are handled. Sections 7–8 describe
 the backend foundation (`backend/`) and the planned database design. Section 9 describes the
-Progressive Web App layer (installation, service worker, offline and updates).
+Progressive Web App layer (installation, service worker, offline and updates). Section 10 describes
+authentication and sessions.
 
-> The backend currently provides infrastructure and `GET /api/health` only. There is no authentication
-> and no product data endpoint yet; no screen calls the API.
+> The backend provides `GET /api/health` and authentication (FIT-11). There are no product data
+> endpoints yet.
 
 ## 1. Folder structure and layers
 
@@ -558,3 +559,49 @@ Do not add `runtimeCaching` for API or user data. Offline data would need its ow
    one version are never mixed with another.
 4. *Reload to update* sends `SKIP_WAITING`. The new worker activates, the page reloads on `controllerchange`, and old caches are removed.
    If the user dismisses the notice instead, the update applies the next time all app windows are closed and reopened.
+
+## 10. Authentication and sessions
+
+Details, threat model and test results: `docs/fit-11-auth-qa-report.md`.
+
+### Request path
+
+```
+Browser ── same origin ──► Cloudflare Worker (static assets; /api/* → worker/index.ts)
+                                │ adds X-Fitness-Proxy-Auth (PROXY_SECRET) + X-Fitness-Client-Ip
+                                ▼
+                           Render API: proxyGate → rate limit → CSRF → JSON → routes → requireAuth
+```
+
+Development uses the Vite proxy instead of the Worker (no `PROXY_SECRET`, cookie without `Secure`).
+
+### Backend modules
+
+| Path | Responsibility |
+|---|---|
+| `src/auth/password.ts` | Argon2id hashing (OWASP parameters), dummy verification for unknown emails |
+| `src/auth/session-token.ts` | 256-bit tokens; SHA-256 digests are what is stored |
+| `src/auth/cookies.ts` | `__Host-fa_session` (production) / `fa_session` (local), HttpOnly, SameSite=Strict, 14 days |
+| `src/auth/validation.ts` | Body shape (unknown keys rejected), email/name/password rules, NFKC, lone-surrogate rejection |
+| `src/models/user.ts`, `session.ts` | Mongoose models; unique email, unique token hash, TTL on `expiresAt` |
+| `src/services/auth-service.ts` | register / login / logout / session lookup / profile update |
+| `src/middleware/proxy-gate.ts` | Only the Worker (shared secret) may call the API; decides the client IP |
+| `src/middleware/csrf.ts` | Origin allowlist for unsafe methods; JSON-only bodies |
+| `src/middleware/auth.ts` | `requireAuth` (401 without a valid session), `requireDatabase` (503 while disconnected) |
+| `src/routes/auth.ts` | `/api/auth/*`, `/api/users/me` |
+
+Rule for every future endpoint with user data: mount it behind `requireAuth`, take the user id only from
+`authenticated(res).userId`, and include it in every query filter. Never accept a user id from the request.
+
+### Frontend modules
+
+| Path | Layer | Responsibility |
+|---|---|---|
+| `services/api/auth.ts` | services | Endpoint calls (70 s timeout for cold starts), response validation, error → form copy |
+| `hooks/useAuth.ts` | hooks | `AuthContext` and `useAuth()` |
+| `app/providers/AuthProvider.tsx` | app | Session state from `GET /api/auth/me`; `unavailable` (offline/cold start) with automatic retry |
+| `app/auth/AuthGate.tsx` | app | `RequireAuth` (protected layout route) and `GuestOnly` (login/register) |
+| `features/auth/*` | features | Login and registration forms |
+| `utils/safe-redirect.ts` | utils | `?redirect=` validation (same-app paths only) |
+
+The frontend guard is UX only; authorization is enforced by the API on every request.

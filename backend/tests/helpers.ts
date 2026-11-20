@@ -3,7 +3,7 @@ import type { Server } from 'node:http'
 import type { Express } from 'express'
 import { createApp } from '../src/app.js'
 import type { DatabaseStatus } from '../src/database/connection.js'
-import type { RateLimitOptions } from '../src/middleware/rate-limit.js'
+import type { AuthRateLimits, RateLimitOptions } from '../src/middleware/rate-limit.js'
 import { createLogger, type Logger } from '../src/utils/logger.js'
 
 export const silentLogger: Logger = createLogger({ silent: true })
@@ -37,13 +37,23 @@ export function startTestApp(
     logger?: Logger
     trustProxyHops?: number
     rateLimit?: RateLimitOptions
+    authRateLimits?: AuthRateLimits
+    proxySecret?: string
+    secureCookies?: boolean
+    getDatabaseStatus?: () => DatabaseStatus
   } = {},
 ) {
   const app = createApp({
-    config: { corsOrigins: options.corsOrigins ?? ['http://localhost:5173'], trustProxyHops: options.trustProxyHops ?? 0 },
-    getDatabaseStatus: () => options.status ?? 'connected',
+    config: {
+      corsOrigins: options.corsOrigins ?? ['http://localhost:5173'],
+      trustProxyHops: options.trustProxyHops ?? 0,
+      proxySecret: options.proxySecret,
+      secureCookies: options.secureCookies ?? false,
+    },
+    getDatabaseStatus: options.getDatabaseStatus ?? (() => options.status ?? 'connected'),
     logger: options.logger ?? silentLogger,
     rateLimit: options.rateLimit,
+    authRateLimits: options.authRateLimits,
   })
   return listen(app)
 }

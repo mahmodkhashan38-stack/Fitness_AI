@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/app/App'
 import ThemeProvider from '@/app/providers/ThemeProvider'
 import { routes } from '@/app/router'
+import { TestAuthProvider } from '@/test/auth'
 
 let pageShouldThrow = true
 function CrashingPage() {
@@ -23,16 +24,20 @@ function addChildren(route: RouteObject, extra: RouteObject[]): RouteObject {
   return route.index ? route : { ...route, children: [...extra, ...(route.children ?? [])] }
 }
 
-/** Copies the real routes and adds test-only routes to the app shell (path "/"). */
+/** Copies the real routes and adds test-only routes to the app shell (path "/", nested inside RequireAuth). */
 function withTestRoutes(extraAppRoutes: RouteObject[], extraTopLevel: RouteObject[] = []): RouteObject[] {
-  return [...routes.map((route) => (route.path === '/' ? addChildren(route, extraAppRoutes) : route)), ...extraTopLevel]
+  const inject = (route: RouteObject): RouteObject =>
+    route.path === '/' ? addChildren(route, extraAppRoutes) : route.children ? { ...route, children: route.children.map(inject) } : route
+  return [...routes.map(inject), ...extraTopLevel]
 }
 
 function renderAt(path: string, routeTree: RouteObject[]) {
   const router = createMemoryRouter(routeTree, { initialEntries: [path] })
   render(
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <TestAuthProvider>
+        <RouterProvider router={router} />
+      </TestAuthProvider>
     </ThemeProvider>,
   )
   return router
@@ -92,13 +97,15 @@ describe('route-level error isolation', () => {
     function AlwaysFails(): never {
       throw new Error('dashboard always fails')
     }
-    const tree = routes.map((route) => {
-      if (route.path !== '/' || route.index) return route
-      const children = (route.children ?? []).map((child) =>
-        child.index ? { ...child, element: <AlwaysFails /> } : child,
-      )
-      return { ...route, children }
-    })
+    const replaceDashboard = (route: RouteObject): RouteObject => {
+      if (route.index) return route
+      if (route.path === '/') {
+        const children = (route.children ?? []).map((child) => (child.index ? { ...child, element: <AlwaysFails /> } : child))
+        return { ...route, children }
+      }
+      return route.children ? { ...route, children: route.children.map(replaceDashboard) } : route
+    }
+    const tree = routes.map(replaceDashboard)
     renderAt('/', tree)
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Go to Dashboard' })).toBeNull() // pointless on the Dashboard itself
@@ -162,8 +169,7 @@ describe('route-level error isolation', () => {
       ['/progress', 'Progress'],
       ['/profile', 'Profile'],
       ['/settings', 'Settings'],
-      ['/login', 'Log in'],
-      ['/register', 'Create account'],
+      // /login and /register redirect signed-in users; covered in navigation and auth tests.
       ['/does-not-exist', 'Page not found'],
     ]
     for (const [path, heading] of expectations) {
@@ -177,9 +183,21 @@ describe('route-level error isolation', () => {
 })
 
 describe('App', () => {
-  it('renders the full app (providers, top-level boundary, router) without errors', () => {
-    render(<App />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeTruthy()
-    expect(screen.queryByRole('alert')).toBeNull()
+  it('renders the full app (providers, top-level boundary, router) for a signed-in user', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({ user: { id: '1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z' } }),
+      ),
+    )
+    try {
+      render(<App />)
+      expect(await screen.findByRole('heading', { level: 1, name: 'Dashboard' })).toBeTruthy()
+      expect(screen.queryByRole('alert')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+    }
   })
 })

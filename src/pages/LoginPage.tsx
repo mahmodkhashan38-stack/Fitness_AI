@@ -1,7 +1,6 @@
 import { LogIn } from 'lucide-react'
-import { Link } from 'react-router'
 import { Card } from '@/components/ui'
-import { ROUTES } from '@/constants/routes'
+import LoginForm from '@/features/auth/LoginForm'
 
 function LoginPage() {
   return (
@@ -11,16 +10,9 @@ function LoginPage() {
           <LogIn className="size-6" />
         </span>
         <h1 className="text-h2 text-foreground">Log in</h1>
-        <p className="text-body text-foreground-muted">
-          Sign-in is coming in a future sprint. This page uses the public layout, without app navigation.
-        </p>
+        <p className="text-body text-foreground-muted">Welcome back. Log in to continue to Fitness AI.</p>
       </div>
-      <p className="text-body-sm text-foreground-muted">
-        New to Fitness AI?{' '}
-        <Link to={ROUTES.register} className="focus-ring rounded-xs font-semibold text-accent underline-offset-4 hover:underline">
-          Create an account
-        </Link>
-      </p>
+      <LoginForm />
     </Card>
   )
 }
