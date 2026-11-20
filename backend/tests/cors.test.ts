@@ -14,7 +14,7 @@ describe('CORS', () => {
     running = await startTestApp({ corsOrigins: [ALLOWED] })
     const response = await fetch(`${running.url}/api/health`, { headers: { Origin: ALLOWED } })
     expect(response.headers.get('access-control-allow-origin')).toBe(ALLOWED)
-    expect(response.headers.get('access-control-expose-headers')).toBe('X-Request-Id')
+    expect(response.headers.get('access-control-expose-headers')).toBe('X-Request-Id,RateLimit,RateLimit-Policy,Retry-After')
     expect(response.headers.get('access-control-allow-credentials')).toBeNull()
     expect(response.headers.get('vary')).toMatch(/Origin/)
   })

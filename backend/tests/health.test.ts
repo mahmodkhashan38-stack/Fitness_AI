@@ -48,7 +48,11 @@ describe('GET /api/health', () => {
     running = await startTestApp()
     const response = await fetch(`${running.url}/api/health`)
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
-    expect(response.headers.get('content-security-policy')).toContain("default-src 'self'")
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none';frame-ancestors 'none';base-uri 'none';form-action 'none'",
+    )
+    expect(response.headers.get('strict-transport-security')).toMatch(/max-age=\d+/)
+    expect(response.headers.get('x-frame-options')).toBe('SAMEORIGIN')
     expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/)
   })
 

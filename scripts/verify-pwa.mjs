@@ -5,8 +5,11 @@
  * Checks the generated manifest, icons, index.html and service worker against the
  * FIT-9 rules: installable manifest, all icons present, only static build output
  * precached, no runtime caching, /api never handled, updates wait for the user.
+ * Also checks the generated security headers (FIT-10): CSP allows the inline script
+ * by hash and nothing unsafe; caching rules for sw.js and hashed assets.
  * Exits with code 1 and lists every failure.
  */
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
@@ -91,6 +94,21 @@ check(
   'skipWaiting must only run on the SKIP_WAITING message',
 )
 check(!/sourceMappingURL/.test(sw), 'service worker ships a source map reference')
+
+// --- Deployment headers (dist/_headers, see deploy/security-headers.ts) -------------
+const headersFile = existsSync(join(dist, '_headers')) ? read('_headers').toString('utf8') : ''
+check(headersFile !== '', 'dist/_headers missing (security headers would not be applied)')
+check(!precached.includes('_headers'), '_headers must not be precached')
+const csp = headersFile.match(/Content-Security-Policy: (.+)/)?.[1] ?? ''
+check(csp.includes("default-src 'self'") && csp.includes("frame-ancestors 'none'"), 'CSP missing or incomplete')
+check(!/unsafe-inline|unsafe-eval/.test(csp), 'CSP must not allow unsafe-inline or unsafe-eval')
+for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+  if (/\bsrc\s*=/i.test(match[1] ?? '')) continue
+  const hash = `'sha256-${createHash('sha256').update(match[2] ?? '', 'utf8').digest('base64')}'`
+  check(csp.includes(hash), `CSP does not allow the inline script in index.html (${hash})`)
+}
+check(/\/sw\.js\n\s+Cache-Control: no-cache/.test(headersFile), 'sw.js must be served with Cache-Control: no-cache')
+check(/\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/.test(headersFile), 'hashed assets should be immutable')
 
 if (failures.length) {
   console.error(`PWA verification failed (${failures.length}):\n- ${failures.join('\n- ')}`)

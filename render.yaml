@@ -1,0 +1,32 @@
+# Render Blueprint for the Fitness AI API (FIT-10).
+# Docs: https://render.com/docs/blueprint-spec
+# Secrets (MONGODB_URI) and the deployment-specific CORS origin are NOT stored here:
+# `sync: false` makes Render ask for them when the Blueprint is created.
+services:
+  - type: web
+    name: fitness-ai-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    # Dev dependencies (TypeScript) are needed to build; NODE_ENV=production would otherwise skip them.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    # Only backend changes redeploy the API.
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render's load balancer is the single proxy in front of the app.
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      # Exact frontend origin(s), e.g. https://fitness-ai.pages.dev (comma-separated, https only).
+      - key: CORS_ORIGIN
+        sync: false
+      # Dedicated least-privilege Atlas user, mongodb+srv:// (TLS). Never commit this value.
+      - key: MONGODB_URI
+        sync: false

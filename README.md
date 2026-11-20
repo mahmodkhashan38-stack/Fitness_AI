@@ -124,6 +124,7 @@ cp .env.example .env         # PowerShell: Copy-Item .env.example .env
 | `PORT` | No | HTTP port, default `3000`. |
 | `NODE_ENV` | No | `development` (default), `test` or `production`. |
 | `CORS_ORIGIN` | In production | Comma-separated exact browser origins allowed to call the API. Development default: `http://localhost:5173`. In production every entry must be `https`; `*` is never accepted. |
+| `TRUST_PROXY_HOPS` | In production | Number of reverse proxies in front of the API whose `X-Forwarded-For` entries are trusted (client IP for rate limiting). Default `0` (local). Render: `1`. |
 
 The server validates all variables at start-up, prints every problem (never secret values) and exits
 with code 1 if anything is wrong. `backend/.env` is loaded with Node's built-in `process.loadEnvFile`
@@ -179,29 +180,27 @@ Details, limitations and test results: [docs/fit-9-pwa-qa-report.md](docs/fit-9-
 
 ## Deployment
 
-**Frontend.** The output in `dist/` is a static single-page app. Configure the host to serve `index.html`
-for any unknown path (history API fallback); otherwise reloading a deep link such as `/settings` returns 404.
-`npm run preview` already behaves this way. Set `VITE_API_BASE_URL` at build time (see Environment).
-Serve over **HTTPS** (required for the service worker and installation) at the site root, and send
-`Cache-Control: no-cache` for `sw.js`, `index.html` and `manifest.webmanifest` (hashed files in `assets/` can be
-cached for a year, `immutable`). See section 7 of the FIT-9 QA report.
+Public preview hosting (FIT-10): **Cloudflare Pages** (frontend, static) and **Render** (API, free web service),
+with MongoDB Atlas. Configuration lives in the repository, secrets only in the hosts' dashboards.
+Full procedure, URLs, costs, security measures, verification results and rollback:
+[docs/fit-10-deployment-qa-report.md](docs/fit-10-deployment-qa-report.md).
 
-**Backend prerequisites.**
+**Frontend (Cloudflare Pages).** Build command `npm run build`, output `dist`, Node from `.node-version`.
+Set `VITE_API_BASE_URL=https://<api-host>/api` in the Pages build settings (public value). The build writes
+`dist/_headers` (`deploy/security-headers.ts`): a Content Security Policy that allows only this site, the API
+origin and the hashed inline theme script, plus HSTS, frame blocking and caching rules (`sw.js`/`index.html`
+always revalidated, hashed assets immutable). Unknown paths serve `index.html` (SPA fallback, no `404.html`).
 
-- A Node.js host (22.22.2+ or 24.15.0+) that runs `npm ci && npm run build` and `npm start` in `backend/`,
-  sends `SIGTERM` before stopping the process (the server then finishes in-flight requests within 10 s),
-  and terminates TLS (serve the API only over https).
-- Environment variables set in the host: `NODE_ENV=production`, `MONGODB_URI`, `CORS_ORIGIN`
-  (the frontend's https origin) and usually `PORT` (many hosts provide it).
-- Atlas network access allowing the host's outbound IPs.
-- Health check path: `/api/health` (503 while the database is unavailable).
-- Routing, choose one:
-  - **Same origin (recommended):** the frontend host or a reverse proxy forwards `/api/*` to the backend;
-    build the frontend with `VITE_API_BASE_URL=/api`. No CORS involved.
-  - **Separate API domain:** build with `VITE_API_BASE_URL=https://api.example.com/api` and set
-    `CORS_ORIGIN=https://app.example.com` on the backend.
-- In production, indexes are not built automatically (`autoIndex` off); create them deliberately when models exist.
-- If the API runs behind a proxy and later needs client IPs (e.g. rate limiting), configure Express `trust proxy`.
+**Backend (Render).** `render.yaml` (Blueprint) defines the service: `rootDir: backend`, free plan, Frankfurt,
+`npm ci --include=dev && npm run build`, `npm start`, health check `/api/health`, `NODE_ENV=production`,
+`TRUST_PROXY_HOPS=1`. `CORS_ORIGIN` (the Pages origin) and `MONGODB_URI` are entered in the Render dashboard
+(`sync: false`), never committed. The API refuses to start without them, without TLS to MongoDB, or with
+`*`/http origins in production.
+
+**Other hosts** need the same: HTTPS, SPA fallback, the `_headers` rules (or equivalent), `NODE_ENV=production`,
+`MONGODB_URI`, `CORS_ORIGIN`, the correct `TRUST_PROXY_HOPS` for their proxy chain, Atlas network access for the
+API's outbound IPs, and `SIGTERM` before stopping the API (in-flight requests finish within 10 s).
+In production, indexes are not built automatically (`autoIndex` off); create them deliberately when models exist.
 
 ## Notes
 

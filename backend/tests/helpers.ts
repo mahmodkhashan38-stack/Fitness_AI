@@ -3,6 +3,7 @@ import type { Server } from 'node:http'
 import type { Express } from 'express'
 import { createApp } from '../src/app.js'
 import type { DatabaseStatus } from '../src/database/connection.js'
+import type { RateLimitOptions } from '../src/middleware/rate-limit.js'
 import { createLogger, type Logger } from '../src/utils/logger.js'
 
 export const silentLogger: Logger = createLogger({ silent: true })
@@ -29,11 +30,20 @@ export async function listen(app: Express): Promise<RunningServer> {
   }
 }
 
-export function startTestApp(options: { status?: DatabaseStatus; corsOrigins?: string[]; logger?: Logger } = {}) {
+export function startTestApp(
+  options: {
+    status?: DatabaseStatus
+    corsOrigins?: string[]
+    logger?: Logger
+    trustProxyHops?: number
+    rateLimit?: RateLimitOptions
+  } = {},
+) {
   const app = createApp({
-    config: { corsOrigins: options.corsOrigins ?? ['http://localhost:5173'] },
+    config: { corsOrigins: options.corsOrigins ?? ['http://localhost:5173'], trustProxyHops: options.trustProxyHops ?? 0 },
     getDatabaseStatus: () => options.status ?? 'connected',
     logger: options.logger ?? silentLogger,
+    rateLimit: options.rateLimit,
   })
   return listen(app)
 }

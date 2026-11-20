@@ -36,7 +36,9 @@ async function main(): Promise<void> {
   const app = createApp({ config, getDatabaseStatus, logger })
   const server = app.listen(config.port)
 
-  server.on('listening', () => logger.info('API listening', { port: config.port, nodeEnv: config.nodeEnv }))
+  server.on('listening', () =>
+    logger.info('API listening', { port: config.port, nodeEnv: config.nodeEnv, trustProxyHops: config.trustProxyHops }),
+  )
   server.on('error', async (error) => {
     logger.error('Server failed to start', { error })
     await disconnectDatabase().catch(() => {})

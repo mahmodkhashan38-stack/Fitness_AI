@@ -1,6 +1,6 @@
 # Fitness AI — Architecture
 
-Status: FIT-9. Sections 1–6 describe the frontend: how the code is organised, where state lives,
+Status: FIT-10. Sections 1–6 describe the frontend: how the code is organised, where state lives,
 how the app talks to the API, and how errors and loading states are handled. Sections 7–8 describe
 the backend foundation (`backend/`) and the planned database design. Section 9 describes the
 Progressive Web App layer (installation, service worker, offline and updates).
@@ -406,7 +406,7 @@ the root ESLint config ignores it). ESM, TypeScript strict with `NodeNext` resol
 | `src/routes/health.ts` | `GET /api/health` |
 | `src/utils/` | `logger` (JSON lines, redaction), `redactSecrets`, `HttpError`, `createGracefulShutdown` |
 
-Middleware order: request id → Helmet → CORS → `express.json({ limit: '100kb' })` → `/api` routes → 404 → error handler.
+Middleware order: request id → Helmet → CORS → rate limit → `express.json({ limit: '100kb' })` → `/api` routes → 404 → error handler.
 
 `controllers/`, `services/` and `models/` are intentionally not created yet: there is one route and no
 data model. When feature endpoints arrive, use `routes/` (HTTP wiring and input validation) →
@@ -427,6 +427,7 @@ data model. When feature endpoints arrive, use `routes/` (HTTP wiring and input 
 | Malformed JSON body (or a non-object/array root) | 400 | `INVALID_JSON` |
 | Body over 100 KB | 413 | `PAYLOAD_TOO_LARGE` |
 | Unsupported `Content-Encoding` / charset | 415 | `UNSUPPORTED_ENCODING` |
+| More than 120 requests per minute from one client IP | 429 (+ `Retry-After`) | `RATE_LIMITED` |
 | Unexpected error | 500 | `INTERNAL_ERROR` |
 
 `GET /api/health` → `{ status: 'ok' | 'degraded', database: 'connected' | 'connecting' | 'disconnecting' | 'disconnected', timestamp, uptimeSeconds }`,
@@ -448,7 +449,9 @@ if a host ever needs a liveness probe that ignores the database.
 
 ### Security decisions
 
-- **Helmet** defaults (CSP `default-src 'self'`, `nosniff`, HSTS, frame protection …); `X-Powered-By` disabled.
+- **Helmet** with an API-only CSP (`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`),
+  `nosniff`, HSTS, frame protection; `X-Powered-By` disabled. (The frontend's own CSP is generated at build time,
+  see README → Deployment.)
 - **CORS allowlist:** only exact origins from `CORS_ORIGIN`; never `*`, never reflected. `https` only in
   production. Credentials (cookies) are not allowed until the authentication design decides otherwise.
   Requests without an `Origin` header (curl, server-to-server) are not CORS requests and are unaffected;
@@ -464,7 +467,16 @@ if a host ever needs a liveness probe that ignores the database.
   values in every message, field and stack. Logs omit query strings, bodies and headers.
   `.env` is git-ignored; `backend/.env.example` has no real values. The browser never talks to MongoDB.
 - **Mongoose:** `strictQuery` enabled (unknown filter fields are dropped); `autoIndex` off in production.
-- Not yet in place (decide with the features that need them): rate limiting, authentication, `trust proxy`.
+- **Rate limiting** (`middleware/rate-limit.ts`, `express-rate-limit`): 120 requests per minute per client IP on
+  every route (unknown routes included), JSON `429 RATE_LIMITED` with `Retry-After` and IETF `RateLimit` headers
+  (exposed to allowed origins). In-memory store: correct for one instance; a shared store is needed when scaling out.
+  Future sensitive endpoints (login, AI) need their own, stricter limits.
+- **Client IP / `trust proxy`:** `TRUST_PROXY_HOPS` (required in production; Render `1`) is passed to Express as a
+  hop count, never `true`. `req.ip` is then the address appended by the nearest trusted proxy, so a client sending
+  its own `X-Forwarded-For` cannot choose its rate-limit identity (tested for 0 and 1 hop).
+- **MongoDB TLS:** production requires `mongodb+srv://` or `tls=true`; `tls=false`, `ssl=false`, `tlsInsecure` and
+  `tlsAllowInvalid*` are rejected in every environment.
+- Not yet in place (decide with the features that need them): authentication and authorization.
 
 ### Testing
 
