@@ -1,5 +1,6 @@
 import { RouterProvider } from 'react-router'
 import AppProviders from '@/app/providers/AppProviders'
+import PwaStatus from '@/app/pwa/PwaStatus'
 import { router } from '@/app/router'
 import ErrorBoundary from '@/components/feedback/ErrorBoundary'
 import ErrorFallback from '@/components/feedback/ErrorFallback'
@@ -27,6 +28,7 @@ function App() {
     <ErrorBoundary fallback={({ error }) => <AppCrashFallback error={error} />}>
       <AppProviders>
         <RouterProvider router={router} />
+        <PwaStatus />
       </AppProviders>
     </ErrorBoundary>
   )

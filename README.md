@@ -1,11 +1,12 @@
 # Fitness AI
 
 Responsive fitness application (desktop and mobile): a React frontend (repository root) and a
-REST API foundation in [`backend/`](backend).
+REST API foundation in [`backend/`](backend). The frontend is an installable Progressive Web App
+(iPhone via Safari, Android via Chrome; no app stores).
 
 ## Stack
 
-- **Frontend:** React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 · Lucide React · ESLint 10 · Vitest 5
+- **Frontend:** React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 · Lucide React · vite-plugin-pwa (Workbox) · ESLint 10 · Vitest 5
 - **Backend:** Node.js · Express 5 · TypeScript 6 (strict) · MongoDB Atlas via Mongoose 9 · Helmet · cors · Vitest 5
 
 ## Requirements
@@ -31,12 +32,13 @@ Frontend (repository root):
 | Command             | Description                              |
 | ------------------- | ---------------------------------------- |
 | `npm run dev`       | Start the dev server                     |
-| `npm run build`     | Type-check (`tsc -b`) and production build |
+| `npm run build`     | Type-check (`tsc -b`) and production build (incl. service worker and manifest) |
+| `npm run verify:pwa`| Check the PWA output in `dist/` (manifest, icons, caching rules); run after `build` |
 | `npm run typecheck` | Strict TypeScript check only             |
 | `npm run lint`      | Run ESLint (includes import-boundary rules) |
 | `npm test`          | Run unit tests once (Vitest)             |
 | `npm run test:watch`| Run tests in watch mode                  |
-| `npm run preview`   | Preview the production build             |
+| `npm run preview`   | Preview the production build (service worker active; `/api` forwarded to the backend) |
 
 Backend (run inside `backend/`):
 
@@ -53,7 +55,7 @@ Backend (run inside `backend/`):
 
 ```
 src/
-├── app/            App.tsx, router.tsx, providers/ (AppProviders, ThemeProvider)
+├── app/            App.tsx, router.tsx, providers/ (AppProviders, ThemeProvider), pwa/ (service worker updates)
 ├── pages/          Thin route entry points
 ├── features/       Feature modules: auth, dashboard, workouts, nutrition, ai-coach, progress
 ├── components/
@@ -69,6 +71,10 @@ src/
 ├── dev/            Development-only tools (/design-system)
 ├── test/           Test setup and cross-cutting tests
 └── main.tsx
+
+public/             Favicon and PWA icons (192, 512, maskable 512, Apple touch 180)
+pwa.config.ts       Web app manifest and service worker caching rules (tested in pwa.config.test.ts)
+scripts/            verify-pwa.mjs (post-build PWA checks)
 
 backend/
 ├── src/
@@ -159,11 +165,26 @@ To connect one:
 If start-up fails with `could not connect to MongoDB`, check the IP access list, the user name and password,
 and the cluster host. The database is only reached by the backend, never from the browser.
 
+## Install on a phone (PWA)
+
+Fitness AI installs from its HTTPS address, without an app store:
+
+- **iPhone (Safari):** Share → **Add to Home Screen** → keep *Open as Web App* on → **Add**.
+- **Android (Chrome):** ⋮ menu → **Install app** (or *Add to Home screen*).
+
+The app then opens in its own window, starts offline from a cached app shell, and offers new versions
+with a "Reload to update" notice. API data always needs a connection and is never cached.
+The service worker only runs in production builds (`npm run build` + `npm run preview`), never in `npm run dev`.
+Details, limitations and test results: [docs/fit-9-pwa-qa-report.md](docs/fit-9-pwa-qa-report.md).
+
 ## Deployment
 
 **Frontend.** The output in `dist/` is a static single-page app. Configure the host to serve `index.html`
 for any unknown path (history API fallback); otherwise reloading a deep link such as `/settings` returns 404.
 `npm run preview` already behaves this way. Set `VITE_API_BASE_URL` at build time (see Environment).
+Serve over **HTTPS** (required for the service worker and installation) at the site root, and send
+`Cache-Control: no-cache` for `sw.js`, `index.html` and `manifest.webmanifest` (hashed files in `assets/` can be
+cached for a year, `immutable`). See section 7 of the FIT-9 QA report.
 
 **Backend prerequisites.**
 

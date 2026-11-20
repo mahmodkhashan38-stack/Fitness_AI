@@ -1,8 +1,9 @@
 # Fitness AI — Architecture
 
-Status: FIT-8. Sections 1–6 describe the frontend: how the code is organised, where state lives,
+Status: FIT-9. Sections 1–6 describe the frontend: how the code is organised, where state lives,
 how the app talks to the API, and how errors and loading states are handled. Sections 7–8 describe
-the backend foundation (`backend/`) and the planned database design.
+the backend foundation (`backend/`) and the planned database design. Section 9 describes the
+Progressive Web App layer (installation, service worker, offline and updates).
 
 > The backend currently provides infrastructure and `GET /api/health` only. There is no authentication
 > and no product data endpoint yet; no screen calls the API.
@@ -508,3 +509,40 @@ The design follows the frontend contracts in `src/types/models/`.
 Schemas will use Mongoose validation as the last line of defence; request validation in routes stays the
 first one. Indexes are created deliberately in production (e.g. `Model.syncIndexes()` in a release step)
 because `autoIndex` is disabled there.
+
+## 9. Progressive Web App
+
+Configuration: `pwa.config.ts` (used by `vite.config.ts` through `vite-plugin-pwa`; rules tested in
+`pwa.config.test.ts`; generated output checked by `npm run verify:pwa`). Test results, installation steps and
+platform limitations: `docs/fit-9-pwa-qa-report.md`.
+
+### Caching rules
+
+| Request | Handling |
+|---|---|
+| Build output (`index.html`, hashed JS/CSS/fonts, icons, manifest) | Precached at install, versioned by Workbox; replaced as a set when a new version activates |
+| Navigations (any app route) | Precached `index.html` (app shell), online and offline |
+| `/api`, `/api/…`, `/api?…` (fetches and navigations) | Network only; never cached |
+| Anything else | Network (no runtime caching) |
+
+Do not add `runtimeCaching` for API or user data. Offline data would need its own design
+(e.g. IndexedDB with explicit sync and per-user clean-up on sign-out), decided with the feature that needs it.
+
+### Code
+
+| File | Layer | Responsibility |
+|---|---|---|
+| `src/app/pwa/ServiceWorkerUpdates.tsx` | app | Registers the service worker (`virtual:pwa-register`; a no-op in dev and tests), checks for updates hourly and when the app becomes visible, shows the update notice |
+| `src/app/pwa/PwaStatus.tsx` | app | Fixed, bottom-centred status region above the bottom navigation and safe area; rendered once in `App.tsx` |
+| `src/components/feedback/UpdateAvailableNotice.tsx` | components | "A new version is available": *Reload to update* / dismiss |
+| `src/components/feedback/OfflineIndicator.tsx` | components | Offline notice in a persistent `role="status"` region |
+| `src/hooks/useOnlineStatus.ts` | hooks | `navigator.onLine` + `online`/`offline` events via `useSyncExternalStore` |
+
+### Update lifecycle
+
+1. A new deploy changes `sw.js`. The browser finds it on page load, on the hourly check, or when the app returns to the foreground.
+2. The new worker precaches the new files and **waits** (`skipWaiting: false`, `clientsClaim: false`).
+3. The app shows the update notice. The current page keeps running the old version, so lazily loaded files from
+   one version are never mixed with another.
+4. *Reload to update* sends `SKIP_WAITING`. The new worker activates, the page reloads on `controllerchange`, and old caches are removed.
+   If the user dismisses the notice instead, the update applies the next time all app windows are closed and reopened.

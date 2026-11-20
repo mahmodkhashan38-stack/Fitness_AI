@@ -3,11 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Fitness AI: your AI-powered fitness companion." />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#F6F8F4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B0F0E" media="(prefers-color-scheme: dark)" />
+    <!-- Home Screen app (the manifest link is added at build time by vite-plugin-pwa) -->
+    <meta name="application-name" content="Fitness AI" />
+    <meta name="apple-mobile-web-app-title" content="Fitness AI" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- "default": the status bar keeps its own background, so text stays readable in light and dark themes -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
     <title>Fitness AI</title>
     <!--
       Applies the saved theme before the first paint to avoid a light/dark flash.
