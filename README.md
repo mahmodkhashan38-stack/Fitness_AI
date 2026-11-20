@@ -6,6 +6,21 @@ Responsive fitness application (desktop and mobile) — frontend foundation.
 
 React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 · Lucide React · ESLint 10 · Vitest 5
 
+## Requirements
+
+- **Node.js 22.22.2+ (22.x LTS) or 24.15.0+ (24.x LTS).** Node 23 and 25 are not supported.
+  These limits come from the declared `engines` of the toolchain: `jsdom` (tests) needs
+  `^22.22.2 || ^24.15.0 || >=26`, React Router 8 needs `>=22.22.0`, Vitest 5 excludes odd-numbered releases.
+  Older versions (e.g. Node 24.11) print `EBADENGINE` warnings during `npm install`.
+- npm 10 or 11. Install with **`npm ci`** so `package-lock.json` is used exactly and never rewritten.
+
+### Browser support
+
+Builds target Vite's default baseline: Chrome/Edge 111+, Firefox 114+, Safari/iOS 16.4+.
+Some enhancements need newer browsers and degrade gracefully: the account menu uses the
+Popover API where available (Chrome 114, Firefox 125, Safari 17) and a built-in fallback elsewhere;
+dialog and menu entry animations (`@starting-style`) are skipped by older browsers.
+
 ## Scripts
 
 | Command             | Description                              |
@@ -58,6 +73,12 @@ cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
 `.env.local` and other `.env.*` files are git-ignored; only `.env.example` is committed.
 
 Imports use the `@/` alias for `src/`.
+
+## Deployment
+
+The output in `dist/` is a static single-page app. Configure the host to serve `index.html`
+for any unknown path (history API fallback); otherwise reloading a deep link such as `/settings` returns 404.
+`npm run preview` already behaves this way. Set `VITE_API_BASE_URL` at build time (see Environment).
 
 ## Notes
 

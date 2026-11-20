@@ -370,3 +370,12 @@ so it never reaches production.
 `npm test` runs Vitest (jsdom + React Testing Library). Tests sit next to the code they cover
 (`*.test.ts(x)`); cross-cutting examples live in `src/test/`. Test-only components never ship.
 API tests mock `fetch` (injected or stubbed); no test touches the network.
+
+jsdom does not implement `<dialog>.showModal()` or the Popover API. Dialog tests stub `showModal`/`close`
+and test the component's own logic; component tests in jsdom therefore exercise the account menu's
+non-popover fallback. Native behaviour (focus trapping, top layer, popover light-dismiss) and layout,
+contrast and responsiveness were verified in a real browser during Sprint 1 QA
+(see `docs/sprint-1-qa-report.md`); those browser checks are not yet part of the repository.
+
+Use `element.click()` rather than `fireEvent.click` to assert that a *disabled* control can't be toggled:
+`fireEvent` dispatches a synthetic event that browsers deliver even to disabled inputs.

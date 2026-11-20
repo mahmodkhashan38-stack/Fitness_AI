@@ -1,25 +1,67 @@
 import { ChevronDown } from 'lucide-react'
-import { useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { NavLink } from 'react-router'
 import { Avatar, Divider, ThemeToggle } from '@/components/ui'
 import { NAV_ITEMS, PLACEHOLDER_PROFILE, SIDEBAR_SECONDARY_NAV } from '@/constants/navigation'
 import { cn } from '@/utils/cn'
 
+/** Popover API: Chrome 114, Firefox 125, Safari 17. The default Vite build also targets older browsers. */
+function supportsPopover(): boolean {
+  return typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.showPopover === 'function'
+}
+
 /**
- * Profile access in the header. Uses the native Popover API:
- * the button toggles it, Esc or an outside click closes it,
- * and focus returns to the button. Placeholder profile data only.
+ * Profile access in the header (on phones, the only way to Profile and Settings).
+ * Placeholder profile data only.
+ *
+ * Uses the native Popover API where available: the button toggles it, Esc or an
+ * outside click closes it, and focus returns to the button. Browsers without it
+ * get the same behaviour from a small disclosure fallback (aria-expanded/controls).
  */
 function AccountMenu() {
   const popoverId = useId()
   const popoverRef = useRef<HTMLDivElement>(null)
-  const close = () => popoverRef.current?.hidePopover()
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [native] = useState(supportsPopover)
+  const [fallbackOpen, setFallbackOpen] = useState(false)
+
+  const close = () => {
+    if (native) popoverRef.current?.hidePopover()
+    else setFallbackOpen(false)
+  }
+
+  // Fallback only: like a native popover, close on Escape (wherever focus is) or an outside click.
+  useEffect(() => {
+    if (native || !fallbackOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!popoverRef.current?.contains(target) && !buttonRef.current?.contains(target)) setFallbackOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setFallbackOpen(false)
+      buttonRef.current?.focus()
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [native, fallbackOpen])
 
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
-        popoverTarget={popoverId}
+        {...(native
+          ? { popoverTarget: popoverId }
+          : {
+              'aria-expanded': fallbackOpen,
+              'aria-controls': popoverId,
+              onClick: () => setFallbackOpen((open) => !open),
+            })}
         className="focus-ring flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full p-1 transition-colors hover:bg-hover lg:pr-2"
       >
         <span className="sr-only">Account menu for {PLACEHOLDER_PROFILE.name}</span>
@@ -32,10 +74,10 @@ function AccountMenu() {
       <div
         ref={popoverRef}
         id={popoverId}
-        popover="auto"
-        aria-label="Account"
+        {...(native ? { popover: 'auto' as const } : { hidden: !fallbackOpen })}
+        data-fallback-open={!native && fallbackOpen ? '' : undefined}
         className={cn(
-          'fa-popover fixed inset-auto m-0 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface p-2 text-foreground shadow-elevated',
+          'fa-popover fixed inset-auto z-50 m-0 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface p-2 text-foreground shadow-elevated',
           'top-[calc(env(safe-area-inset-top)+var(--spacing-header-mobile)+0.25rem)] right-[max(1rem,env(safe-area-inset-right))]',
           'md:top-[calc(var(--spacing-header)+0.25rem)] md:right-6 lg:right-8',
         )}
@@ -76,7 +118,8 @@ function AccountMenu() {
           <Divider className="my-1.5" />
           <div className="flex flex-col gap-2 px-2 pt-1 pb-1.5">
             <span className="text-caption text-foreground-muted">Appearance</span>
-            <ThemeToggle className="w-full [&>div]:w-full [&_label]:flex-1" />
+            {/* Icon above label so all three options fit the menu down to 320px screens. */}
+            <ThemeToggle className="w-full [&>div]:w-full [&_label]:h-auto [&_label]:min-w-0 [&_label]:flex-1 [&_label]:flex-col [&_label]:gap-1 [&_label]:px-1 [&_label]:py-2 [&_label]:text-caption" />
           </div>
         </div>
       </div>

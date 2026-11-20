@@ -18,7 +18,7 @@ function AppShell() {
     <div className="flex min-h-dvh">
       <a
         href="#main-content"
-        className="focus-ring sr-only z-50 rounded-control bg-primary px-4 py-2 text-label text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        className="focus-ring sr-only z-50 rounded-control bg-primary text-label text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:inline-flex focus:min-h-11 focus:items-center focus:px-4"
       >
         Skip to main content
       </a>

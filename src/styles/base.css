@@ -111,6 +111,13 @@
     transform: none;
   }
 
+  /* Fallback for browsers without the Popover API (see AccountMenu). Kept in its own
+     rule: browsers that don't know :popover-open drop any rule that mentions it. */
+  .fa-popover[data-fallback-open] {
+    opacity: 1;
+    transform: none;
+  }
+
   @starting-style {
     .fa-popover:popover-open {
       opacity: 0;
