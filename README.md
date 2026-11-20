@@ -1,10 +1,12 @@
 # Fitness AI
 
-Responsive fitness application (desktop and mobile) — frontend foundation.
+Responsive fitness application (desktop and mobile): a React frontend (repository root) and a
+REST API foundation in [`backend/`](backend).
 
 ## Stack
 
-React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 · Lucide React · ESLint 10 · Vitest 5
+- **Frontend:** React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 · Lucide React · ESLint 10 · Vitest 5
+- **Backend:** Node.js · Express 5 · TypeScript 6 (strict) · MongoDB Atlas via Mongoose 9 · Helmet · cors · Vitest 5
 
 ## Requirements
 
@@ -13,6 +15,7 @@ React 19 · Vite 8 · TypeScript 6 (strict) · Tailwind CSS 4 · React Router 8 
   `^22.22.2 || ^24.15.0 || >=26`, React Router 8 needs `>=22.22.0`, Vitest 5 excludes odd-numbered releases.
   Older versions (e.g. Node 24.11) print `EBADENGINE` warnings during `npm install`.
 - npm 10 or 11. Install with **`npm ci`** so `package-lock.json` is used exactly and never rewritten.
+  The frontend and `backend/` are separate npm packages, each with its own lockfile.
 
 ### Browser support
 
@@ -23,6 +26,8 @@ dialog and menu entry animations (`@starting-style`) are skipped by older browse
 
 ## Scripts
 
+Frontend (repository root):
+
 | Command             | Description                              |
 | ------------------- | ---------------------------------------- |
 | `npm run dev`       | Start the dev server                     |
@@ -32,6 +37,17 @@ dialog and menu entry animations (`@starting-style`) are skipped by older browse
 | `npm test`          | Run unit tests once (Vitest)             |
 | `npm run test:watch`| Run tests in watch mode                  |
 | `npm run preview`   | Preview the production build             |
+
+Backend (run inside `backend/`):
+
+| Command             | Description                                        |
+| ------------------- | -------------------------------------------------- |
+| `npm run dev`       | Start the API with reload on change (`tsx watch`)  |
+| `npm run build`     | Compile to `backend/dist/`                         |
+| `npm start`         | Run the compiled API (`node dist/server.js`)       |
+| `npm run typecheck` | Strict TypeScript check (source and tests)         |
+| `npm run lint`      | Run ESLint                                         |
+| `npm test`          | Run API tests once (no database needed)            |
 
 ## Structure
 
@@ -53,13 +69,28 @@ src/
 ├── dev/            Development-only tools (/design-system)
 ├── test/           Test setup and cross-cutting tests
 └── main.tsx
+
+backend/
+├── src/
+│   ├── app.ts          Express app factory (middleware, routes; no I/O)
+│   ├── server.ts       Entry point: config → database → listen → graceful shutdown
+│   ├── config/         Environment validation (env.ts)
+│   ├── database/       Mongoose connection lifecycle and status
+│   ├── middleware/     Request id, 404 and error handlers
+│   ├── routes/         HTTP routes (health.ts)
+│   └── utils/          Logger with secret redaction, HttpError, graceful shutdown
+├── tests/              Vitest tests (real HTTP on an ephemeral port; no Atlas required)
+└── .env.example
 ```
 
-Architecture, layer rules, state management, the API layer, and error/loading handling: [docs/architecture.md](docs/architecture.md).
+Architecture, layer rules, state management, the API layer, error/loading handling, the backend
+and the database design: [docs/architecture.md](docs/architecture.md).
 
 ## Environment
 
-The backend does not exist yet; the app runs fully without any environment variables.
+### Frontend (`.env.local` in the repository root)
+
+The app runs without any environment variables; API calls then fail with a clear configuration error.
 
 ```bash
 cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
@@ -67,21 +98,92 @@ cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
 
 | Variable | Description |
 | --- | --- |
-| `VITE_API_BASE_URL` | API base URL, e.g. `http://localhost:3000/api` (dev) or `https://api.example.com/v1` (production). Optional until a backend exists. |
+| `VITE_API_BASE_URL` | API base URL. Use `/api` (same origin; the dev server proxies it to the backend), or an absolute URL such as `https://api.example.com/api` (https required in production). |
+| `DEV_API_PROXY_TARGET` | Development only, read by `vite.config.ts`, never sent to the browser. Where `/api` is forwarded. Default `http://localhost:3000`. |
 
-`VITE_*` variables are embedded in the browser bundle and are public. Never put secrets in them.
+`VITE_*` variables are embedded in the browser bundle and are public. Never put secrets in them,
+and never put backend variables (such as `MONGODB_URI`) in a `VITE_*` variable.
 `.env.local` and other `.env.*` files are git-ignored; only `.env.example` is committed.
+
+### Backend (`backend/.env`)
+
+```bash
+cd backend
+cp .env.example .env         # PowerShell: Copy-Item .env.example .env
+```
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `MONGODB_URI` | Yes | MongoDB connection string (`mongodb+srv://…` for Atlas). Secret. |
+| `PORT` | No | HTTP port, default `3000`. |
+| `NODE_ENV` | No | `development` (default), `test` or `production`. |
+| `CORS_ORIGIN` | In production | Comma-separated exact browser origins allowed to call the API. Development default: `http://localhost:5173`. In production every entry must be `https`; `*` is never accepted. |
+
+The server validates all variables at start-up, prints every problem (never secret values) and exits
+with code 1 if anything is wrong. `backend/.env` is loaded with Node's built-in `process.loadEnvFile`
+only if it exists (run the scripts from `backend/`); in production, set variables in the hosting environment.
 
 Imports use the `@/` alias for `src/`.
 
+## Local development
+
+```bash
+# terminal 1 – API (needs backend/.env with a valid MONGODB_URI)
+cd backend && npm ci && npm run dev
+
+# terminal 2 – frontend (repository root, VITE_API_BASE_URL=/api in .env.local)
+npm ci && npm run dev
+```
+
+Check the API: `GET http://localhost:3000/api/health`, or through the frontend dev server:
+`http://localhost:5173/api/health`. It returns `200 {"status":"ok","database":"connected",…}` when MongoDB
+is connected and `503 {"status":"degraded",…}` otherwise.
+
+## MongoDB Atlas setup
+
+The API has been tested without a real Atlas cluster (all tests run without a database).
+To connect one:
+
+1. Create a cluster in [MongoDB Atlas](https://cloud.mongodb.com) (the free M0 tier is enough for development).
+2. **Database Access:** add a database user with a strong generated password and the
+   *Read and write to any database* role (or, better, `readWrite` on the `fitness_ai` database only).
+3. **Network Access:** add your current IP address for development. For production, add only the
+   outbound IPs of your hosting provider. Avoid `0.0.0.0/0`; if the host has no fixed IPs and you must use
+   it, rely on the strong password and rotate it regularly.
+4. **Connect → Drivers:** copy the `mongodb+srv://` string, insert the user and password
+   (URL-encode special characters, e.g. `@` → `%40`) and add the database name after the host:
+   `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/fitness_ai?retryWrites=true&w=majority`
+5. Put it in `backend/.env` as `MONGODB_URI=…` and run `npm run dev` in `backend/`.
+   The log shows `MongoDB connected` and `API listening`; `/api/health` returns 200.
+
+If start-up fails with `could not connect to MongoDB`, check the IP access list, the user name and password,
+and the cluster host. The database is only reached by the backend, never from the browser.
+
 ## Deployment
 
-The output in `dist/` is a static single-page app. Configure the host to serve `index.html`
+**Frontend.** The output in `dist/` is a static single-page app. Configure the host to serve `index.html`
 for any unknown path (history API fallback); otherwise reloading a deep link such as `/settings` returns 404.
 `npm run preview` already behaves this way. Set `VITE_API_BASE_URL` at build time (see Environment).
 
+**Backend prerequisites.**
+
+- A Node.js host (22.22.2+ or 24.15.0+) that runs `npm ci && npm run build` and `npm start` in `backend/`,
+  sends `SIGTERM` before stopping the process (the server then finishes in-flight requests within 10 s),
+  and terminates TLS (serve the API only over https).
+- Environment variables set in the host: `NODE_ENV=production`, `MONGODB_URI`, `CORS_ORIGIN`
+  (the frontend's https origin) and usually `PORT` (many hosts provide it).
+- Atlas network access allowing the host's outbound IPs.
+- Health check path: `/api/health` (503 while the database is unavailable).
+- Routing, choose one:
+  - **Same origin (recommended):** the frontend host or a reverse proxy forwards `/api/*` to the backend;
+    build the frontend with `VITE_API_BASE_URL=/api`. No CORS involved.
+  - **Separate API domain:** build with `VITE_API_BASE_URL=https://api.example.com/api` and set
+    `CORS_ORIGIN=https://app.example.com` on the backend.
+- In production, indexes are not built automatically (`autoIndex` off); create them deliberately when models exist.
+- If the API runs behind a proxy and later needs client IPs (e.g. rate limiting), configure Express `trust proxy`.
+
 ## Notes
 
-- TypeScript is pinned to 6.0 because `typescript-eslint` does not yet support TypeScript 7.
+- TypeScript is pinned to 6.0 in both packages because `typescript-eslint` does not yet support TypeScript 6.1+.
 - Dark mode is class-based (`dark` class on `<html>`); the primary accent maps to Tailwind's lime palette (`primary-*`).
 - Future mobile bottom navigation order is defined in `src/constants/navigation.ts`.

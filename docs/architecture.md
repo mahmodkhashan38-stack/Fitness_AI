@@ -1,9 +1,11 @@
-# Fitness AI — Frontend Architecture
+# Fitness AI — Architecture
 
-Status: FIT-6 (Sprint 1). Describes how the code is organised, where state lives, how the app
-talks to the API, and how errors and loading states are handled.
+Status: FIT-8. Sections 1–6 describe the frontend: how the code is organised, where state lives,
+how the app talks to the API, and how errors and loading states are handled. Sections 7–8 describe
+the backend foundation (`backend/`) and the planned database design.
 
-> **There is no backend yet.** The API client is infrastructure only; no feature calls it so far.
+> The backend currently provides infrastructure and `GET /api/health` only. There is no authentication
+> and no product data endpoint yet; no screen calls the API.
 
 ## 1. Folder structure and layers
 
@@ -113,6 +115,7 @@ Files in `src/services/api/`:
 | `errors.ts` | `ApiError` (the only error type the client throws) and `isApiError` |
 | `config.ts` | Reads and validates `VITE_API_BASE_URL` |
 | `types.ts` | `HttpMethod`, `QueryParams`, `ApiRequestOptions`, `ApiClient` … |
+| `health.ts` | `fetchApiHealth()` and `parseApiHealth()` for `GET /api/health` (first real endpoint) |
 
 Built on native `fetch`, with no HTTP library, no automatic retries and no global auth.
 
@@ -122,7 +125,10 @@ Built on native `fetch`, with no HTTP library, no automatic retries and no globa
 |---|---|---|
 | `VITE_API_BASE_URL` | Only when calling the API | Absolute `http(s)` URL or same-origin path (`/api`). Trailing slashes are removed. |
 
-- **Development:** copy `.env.example` to `.env.local` (git-ignored) and set e.g. `http://localhost:3000/api`.
+- **Development:** copy `.env.example` to `.env.local` (git-ignored); it sets `VITE_API_BASE_URL=/api`.
+  `vite.config.ts` proxies `/api` to the backend (`DEV_API_PROXY_TARGET`, default `http://localhost:3000`),
+  so the browser sees a single origin and CORS is not involved. Calling `http://localhost:3000/api`
+  directly also works because the backend's development `CORS_ORIGIN` default is `http://localhost:5173`.
 - **Production:** set the variable in the build environment (`.env.production.local` or the CI/hosting settings).
   It must be `https` (local hosts excepted) or a same-origin path. It is baked in at **build time**.
 - **Not set:** the app runs normally; API calls reject with `ApiError` `kind: 'config'`.
@@ -222,7 +228,9 @@ explicitly. Token storage, refresh and attaching credentials will be designed in
   successful responses must be JSON or empty.
 - No retries, request deduplication or caching. For user-facing errors see section 4.
 - `fetch` default credentials (`same-origin`); cookie vs. token auth is undecided.
-- No backend exists; nothing in the app calls the client yet.
+- The only endpoint is `GET /api/health` (`fetchApiHealth`); no screen calls it yet.
+  It resolves for `200` (`status: 'ok'`) and for `503` (`status: 'degraded'`: API up, database down)
+  and throws `ApiError` otherwise.
 
 ## 4. Errors and loading
 
@@ -379,3 +387,124 @@ contrast and responsiveness were verified in a real browser during Sprint 1 QA
 
 Use `element.click()` rather than `fireEvent.click` to assert that a *disabled* control can't be toggled:
 `fireEvent` dispatches a synthetic event that browsers deliver even to disabled inputs.
+
+## 7. Backend
+
+`backend/` is a separate npm package (own `package.json`, lockfile, `tsconfig`, ESLint and Vitest config;
+the root ESLint config ignores it). ESM, TypeScript strict with `NodeNext` resolution, Express 5.
+
+### Structure and request flow
+
+| Path | Responsibility |
+|---|---|
+| `src/server.ts` | Entry point: load `.env` (dev), validate config, connect MongoDB, listen, register shutdown handlers |
+| `src/app.ts` | `createApp({ config, getDatabaseStatus, logger })`: builds the Express app with no I/O, so tests run it without a database |
+| `src/config/env.ts` | `loadConfig(env)` → typed `AppConfig`; throws `ConfigError` listing every problem |
+| `src/database/connection.ts` | `connectDatabase`, `disconnectDatabase`, `getDatabaseStatus` (shared Mongoose connection) |
+| `src/middleware/` | `requestId`, `notFound`, `errorHandler(logger)` |
+| `src/routes/health.ts` | `GET /api/health` |
+| `src/utils/` | `logger` (JSON lines, redaction), `redactSecrets`, `HttpError`, `createGracefulShutdown` |
+
+Middleware order: request id → Helmet → CORS → `express.json({ limit: '100kb' })` → `/api` routes → 404 → error handler.
+
+`controllers/`, `services/` and `models/` are intentionally not created yet: there is one route and no
+data model. When feature endpoints arrive, use `routes/` (HTTP wiring and input validation) →
+`services/` (business rules, always scoped by user id) → `models/` (Mongoose schemas).
+
+### API conventions
+
+- All endpoints live under `/api`. JSON in and out.
+- Errors always have the shape `{ "error": { "code": "NOT_FOUND", "message": "…", "requestId": "…" } }`.
+  `code` is stable and machine-readable; `message` is safe to show; `requestId` matches the
+  `X-Request-Id` response header and the server logs.
+- Throw `HttpError(status, code, message)` for expected failures. Any other error becomes
+  `500 INTERNAL_ERROR` with a generic message and is logged.
+
+| Situation | Status | Code |
+|---|---|---|
+| Unknown route or method | 404 | `NOT_FOUND` |
+| Malformed JSON body (or a non-object/array root) | 400 | `INVALID_JSON` |
+| Body over 100 KB | 413 | `PAYLOAD_TOO_LARGE` |
+| Unsupported `Content-Encoding` / charset | 415 | `UNSUPPORTED_ENCODING` |
+| Unexpected error | 500 | `INTERNAL_ERROR` |
+
+`GET /api/health` → `{ status: 'ok' | 'degraded', database: 'connected' | 'connecting' | 'disconnecting' | 'disconnected', timestamp, uptimeSeconds }`,
+`200` when the database is connected, otherwise `503`, with `Cache-Control: no-store`. It reveals no
+hostnames, versions or configuration. It is both the liveness check and the readiness check; split them
+if a host ever needs a liveness probe that ignores the database.
+
+### Lifecycle
+
+- **Start-up:** invalid configuration → all problems logged, exit code 1. MongoDB unreachable within 10 s
+  (server selection timeout) → redacted error logged, exit code 1. The server only listens after the
+  database is connected, so it never serves traffic it cannot handle.
+- **Runtime:** Mongoose reconnects automatically; `connected` / `disconnected` / `reconnected` / `error`
+  events are logged, and `/api/health` reports the current state.
+- **Shutdown:** on `SIGTERM`/`SIGINT` the server stops accepting connections, closes idle keep-alive
+  connections, waits for in-flight requests, disconnects MongoDB and exits 0. After 10 s the remaining
+  connections are destroyed and it exits 1. `unhandledRejection` and `uncaughtException` are logged and
+  trigger the same shutdown with exit code 1. Repeated signals are ignored.
+
+### Security decisions
+
+- **Helmet** defaults (CSP `default-src 'self'`, `nosniff`, HSTS, frame protection …); `X-Powered-By` disabled.
+- **CORS allowlist:** only exact origins from `CORS_ORIGIN`; never `*`, never reflected. `https` only in
+  production. Credentials (cookies) are not allowed until the authentication design decides otherwise.
+  Requests without an `Origin` header (curl, server-to-server) are not CORS requests and are unaffected;
+  CORS is a browser protection, not access control. Authorization will be enforced per request.
+- **Body limits:** JSON only, 100 KB, strict parsing (objects and arrays only). Raise per route if needed.
+- **Input validation:** the only endpoint takes no input. Incoming `X-Request-Id` is reused only if it
+  matches `^[A-Za-z0-9-]{8,64}$`, otherwise replaced (prevents log injection). Configuration is validated
+  at start-up. Each future endpoint must validate its body, params and query before use.
+- **Safe errors:** responses never include stack traces, internal messages or the requested path;
+  the same in every environment.
+- **Secrets:** `MONGODB_URI` is read only on the server, never logged, and never echoed in config errors.
+  The logger redacts credentials in URLs (`mongodb+srv://***:***@…`) and `password=`/`token=`-style
+  values in every message, field and stack. Logs omit query strings, bodies and headers.
+  `.env` is git-ignored; `backend/.env.example` has no real values. The browser never talks to MongoDB.
+- **Mongoose:** `strictQuery` enabled (unknown filter fields are dropped); `autoIndex` off in production.
+- Not yet in place (decide with the features that need them): rate limiting, authentication, `trust proxy`.
+
+### Testing
+
+`cd backend && npm test`. Tests start the real Express app on an ephemeral port and use `fetch`, so headers,
+body parsing and CORS are exercised end to end. Database failure is tested with a real Mongoose connection
+to a closed port; start-up failures run `src/server.ts` as a child process. No test needs MongoDB Atlas.
+A successful connection to a real database is not covered by automated tests (see README for manual setup).
+
+## 8. Database design (planned)
+
+Only the connection exists. No models are implemented yet; each is added with the feature that uses it.
+The design follows the frontend contracts in `src/types/models/`.
+
+### Conventions
+
+- **Ownership and isolation:** every user-owned document has a required, indexed `userId` (`ObjectId`).
+  The id always comes from the authenticated session, never from the request body or query. Services take
+  `userId` as a required argument and include it in every filter (`findOne({ _id, userId })`), so another
+  user's document is indistinguishable from a missing one (404, not 403). Compound indexes start with `userId`.
+- **Ids:** MongoDB `ObjectId`; exposed to the API as the string `id` (the frontend `EntityId`).
+  Responses are mapped explicitly; `_id`, `__v` and secrets such as password hashes are never returned.
+- **Timestamps:** Mongoose `timestamps: true` (`createdAt`, `updatedAt`, UTC) on every collection.
+- **Dates:** instants (`IsoDateTime`) are stored as BSON `Date` (UTC). Calendar days (`IsoDate`) are stored
+  as `YYYY-MM-DD` strings in the user's local calendar, so a day never shifts with time zones.
+- **Units:** stored in canonical metric units named in the field (`weightKg`, `heightCm`, `caloriesKcal`,
+  `proteinG`); conversion to imperial happens only in the UI. Schemas enforce plausible ranges
+  (e.g. `weightKg` 0–700, non-negative macros).
+- **Bounded documents:** embedded arrays have maximum lengths; free text has maximum lengths.
+- **Deletion:** deleting a user deletes all their documents (account deletion and privacy).
+
+### Collections
+
+| Collection | Fields (beyond `_id`, timestamps) | Indexes | Notes |
+|---|---|---|---|
+| `users` | `email`, `name`, `passwordHash` (auth sprint), `profile { heightCm, dateOfBirth (IsoDate), goal, preferredUnits }` | unique `email` (stored lower-case, trimmed) | Profile embedded: one-to-one, always read with the user. `passwordHash` excluded from queries by default (`select: false`). |
+| `workouts` | `userId`, `name`, `date` (Date), `exercises[]` | `{ userId: 1, date: -1 }` | Exercises are embedded subdocuments (`name`, `muscleGroup`, `sets[{ repetitions, weightKg \| null, completed }]`); their `_id` is the frontend `Exercise.id`. Workouts are read and written as a unit; limit e.g. 50 exercises × 50 sets. |
+| `exercises` | — | — | **Not a separate collection for now**: in the frontend model an exercise belongs to one workout. A shared exercise catalogue (names, muscle groups, instructions) can become its own collection later and be referenced by id. |
+| `nutritionEntries` | `userId`, `date` (IsoDate), `foodName`, `serving { amount, unit }`, `caloriesKcal`, `proteinG`, `carbohydratesG`, `fatG`, `loggedAt?` (Date) | `{ userId: 1, date: -1 }` | One document per logged food (unbounded per day, so not embedded). `date` is a proposed addition to the frontend model: `loggedAt` is optional, and daily totals need a local-day key. |
+| `bodyMeasurements` | `userId`, `date` (IsoDate), `weightKg`, `circumferencesCm?`, `bodyFatPercent?` | unique `{ userId: 1, date: -1 }` | One entry per user per day (to confirm with the Progress feature); progress charts read by date range. |
+| `coachMessages` | `userId`, `role` (`user` \| `assistant`), `content` | `{ userId: 1, createdAt: -1 }` | `timestamp` in the frontend model maps to `createdAt`. Content length capped. Retention period and a possible `conversationId` to be decided with the AI Coach feature; messages may contain health information, so they are never logged. |
+
+Schemas will use Mongoose validation as the last line of defence; request validation in routes stays the
+first one. Indexes are created deliberately in production (e.g. `Model.syncIndexes()` in a release step)
+because `autoIndex` is disabled there.

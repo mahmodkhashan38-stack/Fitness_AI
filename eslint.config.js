@@ -47,7 +47,7 @@ const restrict = (bannedLayers, extraGroups = []) => ({
 const FOUNDATION = 'src/{types,constants,utils}/**/*.{ts,tsx}'
 
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules', 'coverage']),
+  globalIgnores(['dist', 'node_modules', 'coverage', 'backend']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
