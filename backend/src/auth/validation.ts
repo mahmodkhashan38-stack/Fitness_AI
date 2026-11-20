@@ -1,4 +1,6 @@
 import { HttpError } from '../utils/http-error.js'
+import { readObject, validationError as invalid } from '../utils/validation.js'
+import { parseFitnessProfile, type FitnessProfileInput } from '../fitness/validation.js'
 
 export const PASSWORD_MIN_LENGTH = 12
 /** Generous but bounded: Argon2 handles long inputs, and passwords are never truncated. */
@@ -14,6 +16,8 @@ export interface RegistrationInput {
   email: string
   password: string
   name: string
+  /** Mandatory fitness onboarding (FIT-12): an account is never created without it. */
+  profile: FitnessProfileInput
 }
 
 export interface LoginInput {
@@ -51,22 +55,6 @@ export function normaliseEmail(email: string): string {
   return email.normalize('NFC').trim().toLowerCase()
 }
 
-function invalid(fields: Record<string, string>): HttpError {
-  return new HttpError(400, 'VALIDATION_FAILED', 'Check the highlighted fields and try again.', { fields })
-}
-
-/** The body must be a plain object containing exactly the allowed keys (unknown keys, e.g. "id" or "role", are rejected). */
-function readObject(body: unknown, allowed: readonly string[]): Record<string, unknown> {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new HttpError(400, 'VALIDATION_FAILED', 'Request body must be a JSON object.')
-  }
-  const unknownKeys = Object.keys(body).filter((key) => !allowed.includes(key))
-  if (unknownKeys.length > 0) {
-    throw new HttpError(400, 'VALIDATION_FAILED', `Unexpected field: ${unknownKeys[0]!.slice(0, 40)}.`)
-  }
-  return body as Record<string, unknown>
-}
-
 function validateEmail(value: unknown, fields: Record<string, string>): string {
   if (typeof value !== 'string' || value.trim() === '') {
     fields.email = 'Enter your email address.'
@@ -89,7 +77,7 @@ function validateName(value: unknown, fields: Record<string, string>): string {
 }
 
 export function parseRegistration(body: unknown): RegistrationInput {
-  const data = readObject(body, ['email', 'password', 'name'])
+  const data = readObject(body, ['email', 'password', 'name', 'profile'])
   const fields: Record<string, string> = {}
   const email = validateEmail(data.email, fields)
   const name = validateName(data.name, fields)
@@ -108,8 +96,11 @@ export function parseRegistration(body: unknown): RegistrationInput {
     fields.password = 'Your password can’t be your email address.'
   }
 
-  if (Object.keys(fields).length > 0) throw invalid(fields)
-  return { email, password: password as string, name }
+  // Every problem is reported at once, account and profile fields alike (field names are distinct).
+  const profile = parseFitnessProfile(data.profile, fields)
+
+  if (Object.keys(fields).length > 0 || !profile) throw invalid(fields)
+  return { email, password: password as string, name, profile }
 }
 
 /**

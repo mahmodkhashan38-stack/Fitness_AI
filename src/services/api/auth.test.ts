@@ -9,8 +9,9 @@ import {
   toAuthFormError,
 } from '@/services/api/auth'
 import { ApiError } from '@/services/api/errors'
+import { TEST_PROFILE_INPUT } from '@/test/fitness-profile'
 
-const user = { id: 'u1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z' }
+const user = { id: 'u1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z', onboardingCompleted: true }
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const httpError = (status: number, body: unknown) => new ApiError({ kind: 'http', status, body, message: 'x' })
 
@@ -43,7 +44,7 @@ describe('auth API', () => {
   it('login and register POST JSON same-origin, letting the browser handle the cookie', async () => {
     fetchMock.mockImplementation(async () => json({ user }))
     await login({ email: 'alex@example.com', password: 'pw pw pw pw pw' })
-    await register({ email: 'alex@example.com', password: 'pw pw pw pw pw', name: 'Alex' })
+    await register({ email: 'alex@example.com', password: 'pw pw pw pw pw', name: 'Alex', profile: TEST_PROFILE_INPUT })
     const [loginUrl, loginInit] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(loginUrl).toBe('/api/auth/login')
     expect(loginInit.method).toBe('POST')
@@ -64,6 +65,9 @@ describe('auth API', () => {
   it('rejects malformed user payloads', () => {
     expect(() => parseAuthUser({ ...user, id: 1 })).toThrow()
     expect(() => parseAuthUser(null)).toThrow()
+    // The onboarding state is required (FIT-12): a missing or non-boolean flag fails closed.
+    expect(() => parseAuthUser({ ...user, onboardingCompleted: undefined })).toThrow()
+    expect(() => parseAuthUser({ ...user, onboardingCompleted: 'true' })).toThrow()
     expect(parseAuthUser({ ...user, passwordHash: 'x' })).toEqual(user) // extra fields dropped
   })
 })

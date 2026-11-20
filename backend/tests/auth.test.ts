@@ -31,7 +31,7 @@ afterEach(async () => {
 const fresh = () => (client = createClient(running.url))
 const sessionCookie = (c: TestClient) => c.jar.get('fa_session')
 
-type UserBody = { user: { id: string; email: string; name: string; createdAt: string } }
+type UserBody = { user: { id: string; email: string; name: string; createdAt: string; onboardingCompleted: boolean } }
 type ErrorBody = { error: { code: string; message: string; fields?: Record<string, string>; requestId: string } }
 
 describe('registration', () => {
@@ -41,7 +41,13 @@ describe('registration', () => {
 
     expect(response.status).toBe(201)
     expect(response.body).toEqual({
-      user: { id: expect.stringMatching(/^[0-9a-f]{24}$/), email: 'alex@example.com', name: 'Alex', createdAt: expect.any(String) },
+      user: {
+        id: expect.stringMatching(/^[0-9a-f]{24}$/),
+        email: 'alex@example.com',
+        name: 'Alex',
+        createdAt: expect.any(String),
+        onboardingCompleted: true,
+      },
     })
     expect(JSON.stringify(response.body)).not.toMatch(/password|hash|_id|__v/i)
     expect(response.headers.get('cache-control')).toBe('no-store')
@@ -75,7 +81,7 @@ describe('registration', () => {
   })
 
   it.each([
-    [{}, ['email', 'password', 'name']],
+    [{}, ['email', 'password', 'name', 'sex', 'age', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek']],
     [validRegistration({ email: 'not-an-email' }), ['email']],
     [validRegistration({ password: 'short' }), ['password']],
     [validRegistration({ password: 'x'.repeat(129) }), ['password']],

@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { hashPassword, verifyPassword } from '../src/auth/password.js'
 import { hasLoneSurrogate, normalisePassword, parseLogin, parseRegistration } from '../src/auth/validation.js'
 import { HttpError } from '../src/utils/http-error.js'
-import { createClient } from './support/client.js'
+import { createClient, validProfile } from './support/client.js'
 import { startTestDatabase } from './support/mongo.js'
 import { startTestApp, type RunningServer } from './helpers.js'
 
@@ -50,7 +50,7 @@ describe('input rules', () => {
 
   it('registration refuses lone surrogates with a field error', () => {
     try {
-      parseRegistration({ email: 'a@b.co', name: 'A', password: 'long enough password\ud800' })
+      parseRegistration({ email: 'a@b.co', name: 'A', password: 'long enough password\ud800', profile: validProfile() })
       expect.unreachable()
     } catch (error) {
       expect(error).toBeInstanceOf(HttpError)
@@ -64,8 +64,8 @@ describe('input rules', () => {
 
   it('length limits apply after normalisation', () => {
     // 11 decomposed characters are 22 UTF-16 units but 11 characters after NFKC.
-    expect(() => parseRegistration({ email: 'a@b.co', name: 'A', password: 'é'.repeat(11) })).toThrow(HttpError)
-    expect(parseRegistration({ email: 'a@b.co', name: 'A', password: 'é'.repeat(12) }).password).toBe('é'.repeat(12))
+    expect(() => parseRegistration({ email: 'a@b.co', name: 'A', password: 'é'.repeat(11), profile: validProfile() })).toThrow(HttpError)
+    expect(parseRegistration({ email: 'a@b.co', name: 'A', password: 'é'.repeat(12), profile: validProfile() }).password).toBe('é'.repeat(12))
   })
 })
 
@@ -87,7 +87,7 @@ describe('end to end (real MongoDB)', () => {
   })
 
   const register = (password: string, email = 'alex@example.com') =>
-    createClient(running.url).post('/api/auth/register', { email, password, name: 'Alex' }).then((r) => r.status)
+    createClient(running.url).post('/api/auth/register', { email, password, name: 'Alex', profile: validProfile() }).then((r) => r.status)
   const login = (password: string, email = 'alex@example.com') =>
     createClient(running.url).post('/api/auth/login', { email, password }).then((r) => r.status)
 

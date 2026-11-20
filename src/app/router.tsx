@@ -1,5 +1,5 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
-import { GuestOnly, RequireAuth } from '@/app/auth/AuthGate'
+import { GuestOnly, OnboardingOnly, RequireAuth, RequireOnboarding } from '@/app/auth/AuthGate'
 import AppShell from '@/components/layout/AppShell'
 import PublicLayout from '@/components/layout/PublicLayout'
 import RouteErrorFallback from '@/components/layout/RouteErrorFallback'
@@ -11,6 +11,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import NutritionPage from '@/pages/NutritionPage'
+import OnboardingPage from '@/pages/OnboardingPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ProgressPage from '@/pages/ProgressPage'
 import RegisterPage from '@/pages/RegisterPage'
@@ -59,25 +60,40 @@ export const routes: RouteObject[] = [
       },
     ],
   },
-  // App pages: require a session, then the sidebar / bottom navigation shell.
+  // Signed-in pages. Accounts without a fitness profile (created before FIT-12) complete
+  // onboarding first; /onboarding itself is outside the app shell and its gate, so no loop.
   {
     element: <RequireAuth />,
     errorElement: <RouteErrorFallback />,
     children: [
       {
-        path: ROUTES.dashboard,
-        element: <AppShell />,
-        errorElement: <RouteErrorFallback />,
+        element: <PublicLayout />,
         children: [
-          { index: true, element: <DashboardPage />, handle: handle(NAV_ITEMS.dashboard.label) },
-          { path: ROUTES.workouts, element: <WorkoutsPage />, handle: handle(NAV_ITEMS.workouts.label) },
-          { path: ROUTES.nutrition, element: <NutritionPage />, handle: handle(NAV_ITEMS.nutrition.label) },
-          { path: ROUTES.aiCoach, element: <AiCoachPage />, handle: handle(NAV_ITEMS.aiCoach.label) },
-          { path: ROUTES.progress, element: <ProgressPage />, handle: handle(NAV_ITEMS.progress.label) },
-          { path: ROUTES.profile, element: <ProfilePage />, handle: handle(NAV_ITEMS.profile.label) },
-          { path: ROUTES.settings, element: <SettingsPage />, handle: handle(NAV_ITEMS.settings.label) },
-          ...devRoutes,
-          { path: '*', element: <NotFoundPage />, handle: handle('Page not found') },
+          {
+            element: <OnboardingOnly />,
+            children: [{ path: ROUTES.onboarding, element: <OnboardingPage />, handle: handle('Complete your profile') }],
+          },
+        ],
+      },
+      {
+        element: <RequireOnboarding />,
+        children: [
+          {
+            path: ROUTES.dashboard,
+            element: <AppShell />,
+            errorElement: <RouteErrorFallback />,
+            children: [
+              { index: true, element: <DashboardPage />, handle: handle(NAV_ITEMS.dashboard.label) },
+              { path: ROUTES.workouts, element: <WorkoutsPage />, handle: handle(NAV_ITEMS.workouts.label) },
+              { path: ROUTES.nutrition, element: <NutritionPage />, handle: handle(NAV_ITEMS.nutrition.label) },
+              { path: ROUTES.aiCoach, element: <AiCoachPage />, handle: handle(NAV_ITEMS.aiCoach.label) },
+              { path: ROUTES.progress, element: <ProgressPage />, handle: handle(NAV_ITEMS.progress.label) },
+              { path: ROUTES.profile, element: <ProfilePage />, handle: handle(NAV_ITEMS.profile.label) },
+              { path: ROUTES.settings, element: <SettingsPage />, handle: handle(NAV_ITEMS.settings.label) },
+              ...devRoutes,
+              { path: '*', element: <NotFoundPage />, handle: handle('Page not found') },
+            ],
+          },
         ],
       },
     ],

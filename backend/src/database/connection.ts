@@ -63,6 +63,18 @@ export async function connectDatabase(uri: string, options: ConnectOptions = {})
   }
 }
 
+/**
+ * Multi-document transactions (used by registration) need a replica set or a sharded cluster.
+ * MongoDB Atlas clusters, including the free tier, are replica sets; a plain local `mongod` is not.
+ * Uses `hello`, which every authenticated user may run.
+ */
+export async function supportsTransactions(): Promise<boolean> {
+  const db = mongoose.connection.db
+  if (!db) throw new Error('Not connected to MongoDB')
+  const hello = await db.admin().command({ hello: 1 })
+  return typeof hello.setName === 'string' || hello.msg === 'isdbgrid'
+}
+
 export async function disconnectDatabase(): Promise<void> {
   await mongoose.disconnect()
 }

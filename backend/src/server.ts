@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs'
 import { createApp } from './app.js'
 import { ConfigError, loadConfig } from './config/env.js'
-import { connectDatabase, disconnectDatabase, getDatabaseStatus } from './database/connection.js'
+import { connectDatabase, disconnectDatabase, getDatabaseStatus, supportsTransactions } from './database/connection.js'
+import { FitnessProfileModel } from './models/fitness-profile.js'
 import { SessionModel } from './models/session.js'
 import { UserModel } from './models/user.js'
 import { createLogger } from './utils/logger.js'
@@ -35,10 +36,29 @@ async function main(): Promise<void> {
     return
   }
 
-  // autoIndex is off in production, so build the indexes auth depends on (unique email,
-  // unique session token, session TTL) explicitly. Idempotent; needs only readWrite.
+  // Registration writes the user and their fitness profile in one transaction (FIT-12).
   try {
-    await Promise.all([UserModel.createIndexes(), SessionModel.createIndexes()])
+    if (!(await supportsTransactions())) {
+      logger.error(
+        'Startup aborted: MongoDB does not support transactions. Use a replica set (every MongoDB Atlas cluster is one; ' +
+          'locally: start mongod with --replSet rs0 and run rs.initiate() once).',
+      )
+      await disconnectDatabase().catch(() => {})
+      process.exitCode = 1
+      return
+    }
+  } catch (error) {
+    logger.error('Startup aborted: could not check MongoDB capabilities.', { error })
+    await disconnectDatabase().catch(() => {})
+    process.exitCode = 1
+    return
+  }
+
+  // autoIndex is off in production, so build the indexes the app depends on (unique email,
+  // unique session token, session TTL, one fitness profile per user) explicitly.
+  // Idempotent; needs only readWrite. Existing users and sessions are untouched.
+  try {
+    await Promise.all([UserModel.createIndexes(), SessionModel.createIndexes(), FitnessProfileModel.createIndexes()])
   } catch (error) {
     logger.error('Startup aborted: could not create database indexes.', { error })
     await disconnectDatabase().catch(() => {})

@@ -10,7 +10,7 @@ function RegisterPage() {
           <UserPlus className="size-6" />
         </span>
         <h1 className="text-h2 text-foreground">Create account</h1>
-        <p className="text-body text-foreground-muted">Create your Fitness AI account to get started.</p>
+        <p className="text-body text-foreground-muted">Create your account and tell us about yourself, so Fitness AI can tailor your training.</p>
       </div>
       <RegisterForm />
     </Card>

@@ -17,11 +17,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export function parseAuthUser(value: unknown): AuthUser {
   if (!isRecord(value)) throw new TypeError('Unexpected user payload')
-  const { id, email, name, createdAt } = value
-  if (typeof id !== 'string' || typeof email !== 'string' || typeof name !== 'string' || typeof createdAt !== 'string') {
+  const { id, email, name, createdAt, onboardingCompleted } = value
+  if (
+    typeof id !== 'string' ||
+    typeof email !== 'string' ||
+    typeof name !== 'string' ||
+    typeof createdAt !== 'string' ||
+    typeof onboardingCompleted !== 'boolean'
+  ) {
     throw new TypeError('Unexpected user payload')
   }
-  return { id, email, name, createdAt }
+  return { id, email, name, createdAt, onboardingCompleted }
 }
 
 const parseUserResponse = (data: unknown): AuthUser => {
@@ -60,16 +66,22 @@ export function isTemporaryAuthFailure(error: unknown): boolean {
   return error.kind === 'http' && error.status !== undefined && error.status >= 500
 }
 
-const AUTH_FIELDS: readonly AuthField[] = ['email', 'password', 'name']
+export const AUTH_FIELDS: readonly AuthField[] = ['email', 'password', 'name']
+
+/** The API's error code (e.g. "EMAIL_TAKEN"), if the error carries one. */
+export function apiErrorCode(error: unknown): string | undefined {
+  return isApiError(error) && error.kind === 'http' ? errorCode(error.body) : undefined
+}
 
 function errorCode(body: unknown): string | undefined {
   return isRecord(body) && isRecord(body.error) && typeof body.error.code === 'string' ? body.error.code : undefined
 }
 
-function errorFields(body: unknown): AuthFormError['fields'] {
+/** Per-field messages from a validation error, limited to the fields the form knows. */
+function errorFields<F extends string>(body: unknown, known: readonly F[]): AuthFormError<F>['fields'] {
   if (!isRecord(body) || !isRecord(body.error) || !isRecord(body.error.fields)) return {}
-  const fields: AuthFormError['fields'] = {}
-  for (const field of AUTH_FIELDS) {
+  const fields: AuthFormError<F>['fields'] = {}
+  for (const field of known) {
     const message = body.error.fields[field]
     if (typeof message === 'string') fields[field] = message
   }
@@ -80,7 +92,10 @@ function errorFields(body: unknown): AuthFormError['fields'] {
  * Maps any login/registration failure to fixed, user-friendly copy. Server messages are only
  * used for per-field validation; everything else uses local text, so nothing internal leaks.
  */
-export function toAuthFormError(error: unknown): AuthFormError | null {
+export function toAuthFormError<F extends string = AuthField>(
+  error: unknown,
+  knownFields: readonly F[] = AUTH_FIELDS as unknown as readonly F[],
+): AuthFormError<F> | null {
   if (!isApiError(error)) return { message: 'Something went wrong. Please try again.', fields: {} }
 
   switch (error.kind) {
@@ -96,16 +111,21 @@ export function toAuthFormError(error: unknown): AuthFormError | null {
       return { message: 'Something went wrong. Please try again.', fields: {} }
   }
 
-  const fields = errorFields(error.body)
+  const fields = errorFields(error.body, knownFields)
   switch (errorCode(error.body)) {
     case 'VALIDATION_FAILED':
       return { message: Object.keys(fields).length ? null : 'Check your details and try again.', fields }
     case 'INVALID_CREDENTIALS':
       return { message: 'Email or password is incorrect.', fields: {} }
     case 'EMAIL_TAKEN':
-      return { message: null, fields: { email: 'An account with this email already exists. Log in instead.' } }
+      return {
+        message: null,
+        fields: { email: 'An account with this email already exists. Log in instead.' } as AuthFormError<F>['fields'],
+      }
     case 'RATE_LIMITED':
       return { message: 'Too many attempts. Please wait a few minutes and try again.', fields: {} }
+    case 'UNAUTHENTICATED':
+      return { message: 'Your session has ended. Please log in again.', fields: {} }
     case 'CSRF_REJECTED':
       return { message: 'Your request was blocked for security reasons. Reload the page and try again.', fields: {} }
   }

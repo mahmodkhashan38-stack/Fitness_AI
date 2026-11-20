@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AuthProvider from '@/app/providers/AuthProvider'
 import { RETRY_DELAYS_MS, SLOW_THRESHOLD_MS } from '@/constants/auth'
 import { useAuth, type AuthContextValue } from '@/hooks/useAuth'
+import { TEST_PROFILE_INPUT } from '@/test/fitness-profile'
 
-const user = { id: 'u1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z' }
+const user = { id: 'u1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z', onboardingCompleted: true }
 const ok = () => Response.json({ user })
 const unauthenticated = () => Response.json({ error: { code: 'UNAUTHENTICATED' } }, { status: 401 })
 const unavailable = () => Response.json({ error: { code: 'SERVICE_UNAVAILABLE' } }, { status: 503 })
@@ -130,7 +131,7 @@ describe('AuthProvider', () => {
     expect(status()).toBe('unauthenticated:-:fast')
 
     fetchMock.mockResolvedValueOnce(Response.json({ user }, { status: 201 }))
-    await act(async () => void (await auth.register({ email: 'alex@example.com', password: 'pw pw pw pw pw', name: 'Alex' })))
+    await act(async () => void (await auth.register({ email: 'alex@example.com', password: 'pw pw pw pw pw', name: 'Alex', profile: TEST_PROFILE_INPUT })))
     expect(status()).toBe('authenticated:alex@example.com:fast')
   })
 
@@ -153,5 +154,39 @@ describe('AuthProvider', () => {
     await act(async () => void (await auth.login({ email: 'alex@example.com', password: 'pw pw pw pw pw' })))
     expect(setItem).not.toHaveBeenCalled()
     expect(document.cookie).toBe('') // the session cookie is HttpOnly: never visible to scripts
+  })
+
+  it('completeOnboarding saves the profile and marks onboarding complete without a reload', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { ...user, onboardingCompleted: false } }))
+    renderProvider()
+    await settle()
+    expect(latest.current!.user!.onboardingCompleted).toBe(false)
+
+    fetchMock.mockResolvedValueOnce(Response.json({ profile: { ...TEST_PROFILE_INPUT, onboardingCompleted: true, onboardingCompletedAt: 'x', updatedAt: 'x' } }, { status: 201 }))
+    await act(async () => auth.completeOnboarding(TEST_PROFILE_INPUT))
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/api/users/me/fitness-profile', 'POST', TEST_PROFILE_INPUT])
+    expect(latest.current!.user!.onboardingCompleted).toBe(true)
+    expect(status()).toBe('authenticated:alex@example.com:fast')
+  })
+
+  it('completeOnboarding treats "already completed" (another tab) as done', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { ...user, onboardingCompleted: false } }))
+    renderProvider()
+    await settle()
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'ONBOARDING_ALREADY_COMPLETED' } }, { status: 409 }))
+    await act(async () => auth.completeOnboarding(TEST_PROFILE_INPUT))
+    expect(latest.current!.user!.onboardingCompleted).toBe(true)
+  })
+
+  it('completeOnboarding rethrows other failures and leaves onboarding pending', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { ...user, onboardingCompleted: false } }))
+    renderProvider()
+    await settle()
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'VALIDATION_FAILED', fields: { age: 'x' } } }, { status: 400 }))
+    await act(async () => {
+      await expect(auth.completeOnboarding(TEST_PROFILE_INPUT)).rejects.toMatchObject({ kind: 'http', status: 400 })
+    })
+    expect(latest.current!.user!.onboardingCompleted).toBe(false)
   })
 })

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MongoMemoryServer } from 'mongodb-memory-server-core'
 import { afterAll, describe, expect, it } from 'vitest'
 
 // Runs src/server.ts as a real process from an empty directory (so no .env is loaded).
@@ -51,5 +52,22 @@ describe('server startup', () => {
     expect(output).toContain('could not connect to MongoDB')
     expect(output).not.toContain('hunter2')
     expect(output).not.toContain('API listening')
+  })
+
+  it('refuses to start on a MongoDB that cannot run transactions (standalone), with a clear message', async () => {
+    const standalone = await MongoMemoryServer.create()
+    try {
+      const { code, output } = await runServer({
+        NODE_ENV: 'development',
+        PORT: '3998', // never bound: startup stops before listen
+        MONGODB_URI: standalone.getUri('fitness_ai_startup_test'),
+      })
+      expect(code).toBe(1)
+      expect(output).toContain('MongoDB does not support transactions')
+      expect(output).toContain('replica set')
+      expect(output).not.toContain('API listening')
+    } finally {
+      await standalone.stop()
+    }
   })
 })

@@ -512,7 +512,8 @@ The design follows the frontend contracts in `src/types/models/`.
 
 | Collection | Fields (beyond `_id`, timestamps) | Indexes | Notes |
 |---|---|---|---|
-| `users` | `email`, `name`, `passwordHash` (auth sprint), `profile { heightCm, dateOfBirth (IsoDate), goal, preferredUnits }` | unique `email` (stored lower-case, trimmed) | Profile embedded: one-to-one, always read with the user. `passwordHash` excluded from queries by default (`select: false`). |
+| `users` | `email`, `name`, `passwordHash` | unique `email` (stored lower-case, trimmed) | Authentication data only. `passwordHash` excluded from queries by default (`select: false`). |
+| `fitnessprofiles` (**implemented**, FIT-12) | `userId`, `sex`, `age`, `heightCm`, `weightKg`, `goal`, `trainingDaysPerWeek`, `onboardingCompletedAt` | unique `userId` | One per user, created together with the user in one transaction (or by onboarding for older accounts). A separate collection rather than embedded in `users`, so workout planning, nutrition targets, progress and the AI coach can read it without loading authentication data. Its existence means onboarding is complete. See section 11. |
 | `workouts` | `userId`, `name`, `date` (Date), `exercises[]` | `{ userId: 1, date: -1 }` | Exercises are embedded subdocuments (`name`, `muscleGroup`, `sets[{ repetitions, weightKg \| null, completed }]`); their `_id` is the frontend `Exercise.id`. Workouts are read and written as a unit; limit e.g. 50 exercises × 50 sets. |
 | `exercises` | — | — | **Not a separate collection for now**: in the frontend model an exercise belongs to one workout. A shared exercise catalogue (names, muscle groups, instructions) can become its own collection later and be referenced by id. |
 | `nutritionEntries` | `userId`, `date` (IsoDate), `foodName`, `serving { amount, unit }`, `caloriesKcal`, `proteinG`, `carbohydratesG`, `fatG`, `loggedAt?` (Date) | `{ userId: 1, date: -1 }` | One document per logged food (unbounded per day, so not embedded). `date` is a proposed addition to the frontend model: `loggedAt` is optional, and daily totals need a local-day key. |
@@ -605,3 +606,35 @@ Rule for every future endpoint with user data: mount it behind `requireAuth`, ta
 | `utils/safe-redirect.ts` | utils | `?redirect=` validation (same-app paths only) |
 
 The frontend guard is UX only; authorization is enforced by the API on every request.
+
+## 11. Fitness profile and onboarding (FIT-12)
+
+Registration collects a mandatory fitness profile; accounts created earlier complete it at `/onboarding`.
+Contracts, validation rules and test results: [fit-12-registration-onboarding-qa-report.md](fit-12-registration-onboarding-qa-report.md).
+
+### Backend modules
+
+| Path | Responsibility |
+|---|---|
+| `src/fitness/validation.ts` | Allowed values and ranges, complete profile (registration, onboarding) and partial update parsing |
+| `src/models/fitness-profile.ts` | `FitnessProfile` model (unique `userId`, schema ranges without values in messages), public shape |
+| `src/services/fitness-profile-service.ts` | get / complete onboarding (once) / update (`$set` of validated fields), always by session user |
+| `src/routes/fitness-profile.ts` | `GET`, `POST`, `PATCH /api/users/me/fitness-profile` |
+| `src/services/auth-service.ts` | `register` writes user + profile in one transaction; every user payload carries `onboardingCompleted` |
+| `src/database/connection.ts` | `supportsTransactions()`; `server.ts` refuses to start without a replica set |
+
+### Frontend modules
+
+| Path | Layer | Responsibility |
+|---|---|---|
+| `types/fitness-profile.ts`, `constants/fitness-profile.ts` | types, constants | Contract, options, limits (mirroring the API) |
+| `utils/fitness-profile.ts` | utils | Form ↔ API conversion, client-side validation, display text |
+| `services/api/fitness-profile.ts` | services | Profile endpoints, response validation, error → form copy |
+| `components/ui/RadioCardGroup.tsx` | components | Accessible single choice as cards (native radios) |
+| `components/fitness/FitnessProfileFields.tsx` | components | Body and goal field groups shared by registration, onboarding and the profile page |
+| `features/auth/RegisterForm.tsx` | features | Four-step registration (values kept across steps; errors jump to their step) |
+| `features/account/*` | features | Onboarding form and the profile page editor |
+| `app/auth/AuthGate.tsx` | app | `RequireOnboarding` (app shell) and `OnboardingOnly` (`/onboarding`); `/onboarding` is never a redirect target, so no loops |
+
+Future modules read the profile through `getFitnessProfile(userId)` (or the API) with the session's user id;
+fitness endpoints should answer `409 ONBOARDING_REQUIRED` when it is missing.

@@ -9,6 +9,7 @@ import App from '@/app/App'
 import ThemeProvider from '@/app/providers/ThemeProvider'
 import { routes } from '@/app/router'
 import { TestAuthProvider } from '@/test/auth'
+import { TEST_PROFILE } from '@/test/fitness-profile'
 
 let pageShouldThrow = true
 function CrashingPage() {
@@ -160,24 +161,32 @@ describe('route-level error isolation', () => {
   })
 
   it('every real route still renders inside its layout', async () => {
-    const router = renderAt('/', routes)
-    const expectations: [string, string][] = [
-      ['/', 'Dashboard'],
-      ['/workouts', 'Workouts'],
-      ['/nutrition', 'Nutrition'],
-      ['/ai-coach', 'AI Coach'],
-      ['/progress', 'Progress'],
-      ['/profile', 'Profile'],
-      ['/settings', 'Settings'],
-      // /login and /register redirect signed-in users; covered in navigation and auth tests.
-      ['/does-not-exist', 'Page not found'],
-    ]
-    for (const [path, heading] of expectations) {
-      await act(async () => {
-        await router.navigate(path)
-      })
-      expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
-      expect(screen.queryByRole('alert')).toBeNull()
+    // The Profile page loads the fitness profile.
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ profile: TEST_PROFILE })))
+    try {
+      const router = renderAt('/', routes)
+      const expectations: [string, string][] = [
+        ['/', 'Dashboard'],
+        ['/workouts', 'Workouts'],
+        ['/nutrition', 'Nutrition'],
+        ['/ai-coach', 'AI Coach'],
+        ['/progress', 'Progress'],
+        ['/profile', 'Profile'],
+        ['/settings', 'Settings'],
+        // /login, /register and /onboarding redirect signed-in, onboarded users; covered in navigation and auth tests.
+        ['/does-not-exist', 'Page not found'],
+      ]
+      for (const [path, heading] of expectations) {
+        await act(async () => {
+          await router.navigate(path)
+        })
+        expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
+        expect(screen.queryByRole('alert')).toBeNull()
+      }
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
     }
   })
 })
@@ -188,7 +197,7 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
-        Response.json({ user: { id: '1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z' } }),
+        Response.json({ user: { id: '1', email: 'alex@example.com', name: 'Alex', createdAt: '2026-11-20T10:00:00.000Z', onboardingCompleted: true } }),
       ),
     )
     try {

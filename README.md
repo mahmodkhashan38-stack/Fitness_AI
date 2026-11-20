@@ -137,12 +137,16 @@ Imports use the `@/` alias for `src/`.
 ## Local development
 
 ```bash
-# terminal 1 – API (needs backend/.env with a valid MONGODB_URI)
+# terminal 1 – API (needs backend/.env with a valid MONGODB_URI to a replica set, e.g. Atlas)
 cd backend && npm ci && npm run dev
 
 # terminal 2 – frontend (repository root, VITE_API_BASE_URL=/api in .env.local)
 npm ci && npm run dev
 ```
+
+The API needs MongoDB **transactions** (registration, FIT-12) and refuses to start without them. Every Atlas
+cluster, including the free tier, is a replica set and works as is. A local `mongod` must run as a replica set:
+start it with `--replSet rs0` and run `rs.initiate()` once.
 
 Check the API: `GET http://localhost:3000/api/health`, or through the frontend dev server:
 `http://localhost:5173/api/health`. It returns `200 {"status":"ok","database":"connected",…}` when MongoDB
@@ -189,11 +193,20 @@ Endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/lo
 `PATCH /api/users/me`. All app pages except Log in and Create account require a session.
 Design, security decisions and test results: [docs/fit-11-auth-qa-report.md](docs/fit-11-auth-qa-report.md).
 
+**Fitness onboarding (FIT-12).** Registration is a four-step form (account → body → goals → review). Sex, age,
+height (cm), weight (kg), main goal and training days per week are mandatory: `POST /api/auth/register` takes
+them as `profile` and creates the user and their fitness profile in **one MongoDB transaction**, so an account
+never exists without its profile. Accounts created before FIT-12 are sent to `/onboarding` until they complete
+it. The signed-in user's own profile: `GET` / `POST` (complete onboarding) / `PATCH`
+`/api/users/me/fitness-profile`; there is no endpoint that takes a user id.
+Details: [docs/fit-12-registration-onboarding-qa-report.md](docs/fit-12-registration-onboarding-qa-report.md).
+
 The API must be **same-origin** with the app for the cookie to work (Safari blocks third-party cookies):
 `/api` through the Vite proxy locally, and through the Cloudflare Worker in production.
 
-Backend tests use a throwaway local MongoDB (`mongodb-memory-server-core`), never Atlas: the first run downloads
-a `mongod` binary (~100 MB, cached), or set `MONGOMS_SYSTEM_BINARY` to an installed `mongod`.
+Backend tests use a throwaway local single-node MongoDB **replica set** (`mongodb-memory-server-core`), never
+Atlas, so transactions run as they do on Atlas: the first run downloads a `mongod` binary (~100 MB, cached), or
+set `MONGOMS_SYSTEM_BINARY` to an installed `mongod`.
 
 ## Deployment
 

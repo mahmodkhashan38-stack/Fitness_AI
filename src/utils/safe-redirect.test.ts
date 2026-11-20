@@ -23,6 +23,8 @@ describe('safeRedirectPath', () => {
     '/\nevil',
     '/login',
     '/register?redirect=/x',
+    '/onboarding',
+    '/onboarding?redirect=/onboarding',
   ])('rejects %j', (input) => {
     const result = safeRedirectPath(input)
     if (input === '/%0d%0aSet-Cookie:x') {

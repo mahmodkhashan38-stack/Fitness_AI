@@ -1,3 +1,5 @@
+import type { FitnessProfileField, FitnessProfileInput } from '@/types/fitness-profile'
+
 /** The signed-in user as returned by the API (GET /api/auth/me). Never contains secrets. */
 export interface AuthUser {
   id: string
@@ -5,6 +7,11 @@ export interface AuthUser {
   name: string
   /** ISO 8601 instant. */
   createdAt: string
+  /**
+   * False for accounts created before FIT-12 that have no fitness profile yet: the app sends
+   * them to onboarding before any fitness feature.
+   */
+  onboardingCompleted: boolean
 }
 
 export interface LoginCredentials {
@@ -14,6 +21,8 @@ export interface LoginCredentials {
 
 export interface RegistrationData extends LoginCredentials {
   name: string
+  /** Mandatory: an account is only created together with its fitness profile. */
+  profile: FitnessProfileInput
 }
 
 /**
@@ -26,9 +35,12 @@ export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated' | 'unav
 
 export type AuthField = 'email' | 'password' | 'name'
 
-/** UI-ready error for the login and registration forms. */
-export interface AuthFormError {
+/** Every field of the registration wizard (account details and fitness profile). */
+export type RegistrationField = AuthField | FitnessProfileField
+
+/** UI-ready error for the login, registration and profile forms. */
+export interface AuthFormError<F extends string = AuthField> {
   /** Message for the whole form, or null when only fields are affected. */
   message: string | null
-  fields: Partial<Record<AuthField, string>>
+  fields: Partial<Record<F, string>>
 }

@@ -8,26 +8,37 @@ import { safeRedirectPath } from '@/utils/safe-redirect'
 /** Show the cold-start hint when a submit takes longer than this. */
 const SLOW_SUBMIT_MS = 4_000
 
-const NO_ERROR: AuthFormError = { message: null, fields: {} }
+const AUTH_FIELD_ORDER: readonly AuthField[] = ['name', 'email', 'password']
 
 /**
  * Shared submit logic for the login and registration forms: client-side validation,
  * server error mapping, slow-server hint, and the redirect after success.
+ *
+ * `fieldOrder` lists the form's fields in display order (focus goes to the first invalid one).
+ * `onErrors` runs before focusing, e.g. so the registration wizard can switch to the step that
+ * contains the field; focus is applied after that re-render.
  */
-export function useAuthForm<T>({
+export function useAuthForm<T, F extends string = AuthField>({
   validate,
   submit,
+  fieldOrder = AUTH_FIELD_ORDER as unknown as readonly F[],
+  onErrors,
 }: {
-  validate: () => AuthFormError['fields']
+  validate: () => AuthFormError<F>['fields']
   submit: () => Promise<T>
+  fieldOrder?: readonly F[]
+  onErrors?: (fields: AuthFormError<F>['fields']) => void
 }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [error, setError] = useState<AuthFormError>(NO_ERROR)
+  const [error, setError] = useState<AuthFormError<F>>({ message: null, fields: {} })
   const [submitting, setSubmitting] = useState(false)
   const [slow, setSlow] = useState(false)
-  const fieldRefs = useRef<Partial<Record<AuthField, HTMLInputElement | null>>>({})
+  const [focusRequest, setFocusRequest] = useState<{ field: F } | null>(null)
+  const fieldRefs = useRef<Partial<Record<F, HTMLInputElement | null>>>({})
   const mounted = useRef(true)
+  // A ref, not state: a second submit in the same tick (double tap) must already see it.
+  const inFlight = useRef(false)
 
   useEffect(() => {
     mounted.current = true
@@ -36,35 +47,42 @@ export function useAuthForm<T>({
     }
   }, [])
 
-  const focusFirstInvalid = (fields: AuthFormError['fields']) => {
-    const first = (['name', 'email', 'password'] as const).find((field) => fields[field])
-    if (first) fieldRefs.current[first]?.focus()
+  // Runs after the render that shows the field (it may be on another wizard step).
+  useEffect(() => {
+    if (focusRequest) fieldRefs.current[focusRequest.field]?.focus()
+  }, [focusRequest])
+
+  const showErrors = (next: AuthFormError<F>) => {
+    setError(next)
+    const first = fieldOrder.find((field) => next.fields[field])
+    if (first) {
+      onErrors?.(next.fields)
+      setFocusRequest({ field: first })
+    }
   }
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (submitting) return
+  const onSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault()
+    if (inFlight.current) return
 
     const fields = validate()
     if (Object.keys(fields).length > 0) {
-      setError({ message: null, fields })
-      focusFirstInvalid(fields)
+      showErrors({ message: null, fields })
       return
     }
 
-    setError(NO_ERROR)
+    inFlight.current = true
+    setError({ message: null, fields: {} })
     setSubmitting(true)
     const slowTimer = window.setTimeout(() => setSlow(true), SLOW_SUBMIT_MS)
     try {
       await submit()
       navigate(safeRedirectPath(searchParams.get('redirect')) ?? ROUTES.dashboard, { replace: true })
     } catch (caught) {
-      const mapped = toAuthFormError(caught)
-      if (mapped && mounted.current) {
-        setError(mapped)
-        focusFirstInvalid(mapped.fields)
-      }
+      const mapped = toAuthFormError<F>(caught, fieldOrder)
+      if (mapped && mounted.current) showErrors(mapped)
     } finally {
+      inFlight.current = false
       window.clearTimeout(slowTimer)
       if (mounted.current) {
         setSubmitting(false)
@@ -74,14 +92,17 @@ export function useAuthForm<T>({
   }
 
   /** Ref callback for a field, so validation errors can move focus to it. */
-  const fieldRef = (field: AuthField) => (element: HTMLInputElement | null) => {
+  const fieldRef = (field: F) => (element: HTMLInputElement | null) => {
     fieldRefs.current[field] = element
   }
 
   /** Clears a field's error as soon as the user edits it. */
-  const clearFieldError = (field: AuthField) => {
+  const clearFieldError = (field: F) => {
     setError((current) => (current.fields[field] ? { ...current, fields: { ...current.fields, [field]: undefined } } : current))
   }
+
+  /** Shows errors found outside a submit (e.g. per-step validation in the wizard) and focuses the first. */
+  const reportErrors = (fields: AuthFormError<F>['fields']) => showErrors({ message: null, fields })
 
   /** Keeps ?redirect= when switching between login and registration. */
   const linkWithRedirect = (path: string) => {
@@ -95,6 +116,7 @@ export function useAuthForm<T>({
     slow,
     onSubmit,
     clearFieldError,
+    reportErrors,
     fieldRef,
     linkWithRedirect,
     loginPath: ROUTES.login,

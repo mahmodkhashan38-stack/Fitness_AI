@@ -3,6 +3,7 @@ import { parseCookies, sessionCookieName } from '../src/auth/cookies.js'
 import { hashPassword, needsRehash, verifyAgainstDummyHash, verifyPassword } from '../src/auth/password.js'
 import { generateSessionToken, hashSessionToken, isWellFormedSessionToken } from '../src/auth/session-token.js'
 import { normaliseEmail, parseLogin, parseProfileUpdate, parseRegistration } from '../src/auth/validation.js'
+import { validProfile } from './support/client.js'
 import { HttpError } from '../src/utils/http-error.js'
 
 describe('session tokens', () => {
@@ -72,10 +73,11 @@ describe('validation', () => {
   })
 
   it('accepts valid registration and tidies the name', () => {
-    expect(parseRegistration({ email: 'a@b.co', password: 'twelve chars', name: '  Ana   Maria ' })).toEqual({
+    expect(parseRegistration({ email: 'a@b.co', password: 'twelve chars', name: '  Ana   Maria ', profile: validProfile() })).toEqual({
       email: 'a@b.co',
       password: 'twelve chars',
       name: 'Ana Maria',
+      profile: validProfile(),
     })
   })
 
@@ -88,9 +90,9 @@ describe('validation', () => {
   })
 
   it('accepts exactly 12 and 128 character passwords', () => {
-    expect(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(12), name: 'A' })).not.toThrow()
-    expect(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(128), name: 'A' })).not.toThrow()
-    expect(fieldsOf(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(11), name: 'A' })).fields).toHaveProperty('password')
+    expect(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(12), name: 'A', profile: validProfile() })).not.toThrow()
+    expect(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(128), name: 'A', profile: validProfile() })).not.toThrow()
+    expect(fieldsOf(() => parseRegistration({ email: 'a@b.co', password: 'x'.repeat(11), name: 'A', profile: validProfile() })).fields).toHaveProperty('password')
   })
 
   it('login only requires non-empty strings', () => {

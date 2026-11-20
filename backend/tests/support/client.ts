@@ -51,15 +51,30 @@ export function createClient(baseUrl: string, options: { origin?: string | null;
       request<T>('POST', path, { json, headers }),
     patch: <T = Record<string, unknown>>(path: string, json?: unknown, headers?: Record<string, string>) =>
       request<T>('PATCH', path, { json, headers }),
+    put: <T = Record<string, unknown>>(path: string, json?: unknown, headers?: Record<string, string>) =>
+      request<T>('PUT', path, { json, headers }),
+    delete: <T = Record<string, unknown>>(path: string, headers?: Record<string, string>) => request<T>('DELETE', path, { headers }),
     request,
   }
 }
 
 export type TestClient = ReturnType<typeof createClient>
 
+/** A complete, valid fitness profile (FIT-12). */
+export const validProfile = (overrides: Record<string, unknown> = {}) => ({
+  sex: 'female',
+  age: 29,
+  heightCm: 168,
+  weightKg: 61.5,
+  goal: 'muscle_gain',
+  trainingDaysPerWeek: 4,
+  ...overrides,
+})
+
 export const validRegistration = (overrides: Record<string, unknown> = {}) => ({
   email: 'alex@example.com',
   password: 'correct horse battery staple',
   name: 'Alex',
+  profile: validProfile(),
   ...overrides,
 })

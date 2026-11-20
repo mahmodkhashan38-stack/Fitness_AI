@@ -3,6 +3,7 @@ import { RETRY_DELAYS_MS, SLOW_THRESHOLD_MS } from '@/constants/auth'
 import { AuthContext, type AuthContextValue } from '@/hooks/useAuth'
 import * as authApi from '@/services/api/auth'
 import { isApiError } from '@/services/api/errors'
+import * as fitnessProfileApi from '@/services/api/fitness-profile'
 import type { AuthStatus, AuthUser } from '@/types/auth'
 
 
@@ -98,6 +99,20 @@ function AuthProvider({ children }: { children: ReactNode }) {
     return user
   }, [])
 
+  const completeOnboarding = useCallback<AuthContextValue['completeOnboarding']>(async (profile) => {
+    try {
+      await fitnessProfileApi.completeOnboarding(profile)
+    } catch (error) {
+      // Completed meanwhile (another tab or device): the account already has its profile.
+      if (authApi.apiErrorCode(error) !== 'ONBOARDING_ALREADY_COMPLETED') throw error
+    }
+    setState((current) =>
+      current.status === 'authenticated' && current.user
+        ? { status: 'authenticated', user: { ...current.user, onboardingCompleted: true } }
+        : current,
+    )
+  }, [])
+
   const logout = useCallback<AuthContextValue['logout']>(async () => {
     await authApi.logout()
     setState({ status: 'unauthenticated', user: null })
@@ -110,10 +125,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
       slow,
       login,
       register,
+      completeOnboarding,
       logout,
       refresh,
     }),
-    [state, slow, login, register, logout, refresh],
+    [state, slow, login, register, completeOnboarding, logout, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

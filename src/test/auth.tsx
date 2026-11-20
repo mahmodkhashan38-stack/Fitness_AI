@@ -8,6 +8,7 @@ export const TEST_USER: AuthUser = {
   email: 'alex@example.com',
   name: 'Alex Carter',
   createdAt: '2026-11-20T10:00:00.000Z',
+  onboardingCompleted: true,
 }
 
 /** A fixed auth context for component and route tests (no network). */
@@ -19,6 +20,7 @@ export function createAuthValue(overrides: Partial<AuthContextValue> = {}): Auth
     slow: false,
     login: vi.fn(async () => TEST_USER),
     register: vi.fn(async () => TEST_USER),
+    completeOnboarding: vi.fn(async () => {}),
     logout: vi.fn(async () => {}),
     refresh: vi.fn(),
     ...overrides,

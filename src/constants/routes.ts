@@ -2,6 +2,8 @@ export const ROUTES = {
   dashboard: '/',
   login: '/login',
   register: '/register',
+  /** Fitness profile for accounts created before FIT-12 (outside the app shell). */
+  onboarding: '/onboarding',
   workouts: '/workouts',
   nutrition: '/nutrition',
   aiCoach: '/ai-coach',

@@ -1,5 +1,8 @@
-/** Pages that make no sense as a post-login destination. */
-const EXCLUDED = ['/login', '/register']
+/**
+ * Pages that make no sense as a post-login destination. /onboarding is reached through its
+ * own gate; as a redirect target it could bounce between the onboarding gates.
+ */
+const EXCLUDED = ['/login', '/register', '/onboarding']
 
 /**
  * Validates a ?redirect= value so login can only send users to a page of this app:

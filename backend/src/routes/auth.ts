@@ -50,7 +50,7 @@ export function createAuthRouter({ secureCookies, getDatabaseStatus, rateLimits 
 
   router.patch('/users/me', auth, async (req, res) => {
     const input = parseProfileUpdate(req.body)
-    res.json({ user: await updateProfile(authenticated(res).userId, input) })
+    res.json({ user: await updateProfile(authenticated(res), input) })
   })
 
   return router

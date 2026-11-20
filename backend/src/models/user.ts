@@ -34,8 +34,16 @@ export interface PublicUser {
   email: string
   name: string
   createdAt: string
+  /** False for accounts created before FIT-12 that have no fitness profile yet (the app then asks for it). */
+  onboardingCompleted: boolean
 }
 
-export function toPublicUser(user: Pick<User, '_id' | 'email' | 'name' | 'createdAt'>): PublicUser {
-  return { id: user._id.toString(), email: user.email, name: user.name, createdAt: user.createdAt.toISOString() }
+export function toPublicUser(user: Pick<User, '_id' | 'email' | 'name' | 'createdAt'>, onboardingCompleted: boolean): PublicUser {
+  return {
+    id: user._id.toString(),
+    email: user.email,
+    name: user.name,
+    createdAt: user.createdAt.toISOString(),
+    onboardingCompleted,
+  }
 }

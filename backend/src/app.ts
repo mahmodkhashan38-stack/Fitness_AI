@@ -15,6 +15,7 @@ import {
 } from './middleware/rate-limit.js'
 import { requestId } from './middleware/request-id.js'
 import { createAuthRouter } from './routes/auth.js'
+import { createFitnessProfileRouter } from './routes/fitness-profile.js'
 import { createHealthRouter } from './routes/health.js'
 import type { Logger } from './utils/logger.js'
 
@@ -89,6 +90,7 @@ export function createApp({
     '/api',
     createAuthRouter({ secureCookies: config.secureCookies ?? false, getDatabaseStatus, rateLimits: authRateLimits }),
   )
+  app.use('/api', createFitnessProfileRouter({ secureCookies: config.secureCookies ?? false, getDatabaseStatus }))
 
   app.use(notFound)
   app.use(errorHandler(logger))
