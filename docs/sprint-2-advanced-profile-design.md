@@ -1,12 +1,12 @@
 # Sprint 2 — Advanced Profile: design requirements
 
-Status: **FIT-13 implemented** (see "FIT-13 implementation notes" below); FIT-14 to FIT-17 not started. Sprint 2 builds on FIT-11 (authentication) and FIT-12
+Status: **FIT-13 and FIT-14 implemented** (see their implementation notes below); FIT-15 to FIT-17 not started. Sprint 2 builds on FIT-11 (authentication) and FIT-12
 (mandatory fitness profile). Every ticket must keep FIT-11 and FIT-12 behaviour, data and tests intact.
 
 | Ticket | Title | Status |
 |---|---|---|
 | FIT-13 | Advanced Profile page (hero, avatar, summary, statistics, section cards) | Implemented (placeholder hero until the licensed image arrives) |
-| FIT-14 | Personal and Body Information Management | Outline, to be detailed |
+| FIT-14 | Personal and Body Information Management | Implemented (birth year instead of a stored age) |
 | FIT-15 | Fitness Goals and Training Preferences | Outline, to be detailed |
 | FIT-16 | Body Weight History and Account Security | Outline, to be detailed |
 | FIT-17 | QA and Deployment | Outline, to be detailed |
@@ -77,7 +77,7 @@ so the user never loses their place. Only one card is in edit mode at a time.
 | Card | Shows (FIT-13) | Editing in FIT-13 | Extended by |
 |---|---|---|---|
 | Personal Information | Name, email (read-only), member since | Name, via the existing `PATCH /api/users/me` | FIT-14 |
-| Body Information | Sex, age, height, weight | Existing FIT-12 fields and `PATCH /api/users/me/fitness-profile` | FIT-14, FIT-16 (weight history) |
+| Body Information | Sex, birth year, age (derived), height, weight | FIT-12 fields with birth year (FIT-14) and `PATCH /api/users/me/fitness-profile` | FIT-16 (weight history) |
 | Fitness Goals | Main goal | Existing FIT-12 field and PATCH | FIT-15 |
 | Training Preferences | Training days per week | Existing FIT-12 field and PATCH | FIT-15 (experience level and other preferences) |
 | Account Settings | Email, theme, log out | No new account operations; links to the existing Settings page for theme | FIT-16 (password, sessions) |
@@ -153,15 +153,35 @@ so the user never loses their place. Only one card is in edit mode at a time.
 
 ---
 
-## FIT-14 — Personal and Body Information Management (outline)
+## FIT-14 — Personal and Body Information Management
 
 Goal: complete management of the Personal Information and Body Information cards.
 
-- Edit name (existing endpoint) and body data (sex, age, height, weight) with the FIT-12 rules.
-- Decide whether to replace stored **age** with **birth year** (the FIT-12 report notes that a stored age goes
-  stale). If adopted: schema change, migration of existing profiles, and API compatibility.
+- Edit name (existing endpoint) and body data (sex, birth year, height, weight) with the FIT-12 rules.
+- **Decision (product owner):** replace the stored **age** with a **birth year**, and **ask existing users** for
+  it instead of estimating one.
 - Email stays read-only unless a verified email-change flow is specified.
 - Tests: validation, ownership, partial updates, UI states.
+
+### FIT-14 implementation notes
+
+Details, contract and test results: [fit-14-birth-year-qa-report.md](fit-14-birth-year-qa-report.md).
+
+- **Birth year, not date of birth.** Only the year is collected (less personal data). The accepted range keeps
+  the FIT-12 age rule: the user turns 16–100 during the current calendar year (UTC on both client and server).
+  The age shown is the age reached this year ("29 this year"), because the birthday itself is unknown.
+- **Existing profiles are not migrated by guessing.** A profile saved before FIT-14 keeps its stored `age` until
+  the user adds a birth year. The Body Information card shows "Birth year: Not added", the age as entered, and an
+  "Add your birth year" notice whose button opens the card's form on that field. For these users the field is
+  optional, so other edits never require it. Saving a birth year removes the stored age.
+- **API compatibility.** Responses always include `age` (derived, or as entered) and now `birthYear`
+  (`number | null`), so an installed app that hasn't reloaded yet keeps working. Requests may still send `age`
+  instead of `birthYear` (never both). It is stored as entered only while the profile has no birth year; a
+  confirmed birth year is never overwritten by an old client (the request is refused on the `age` field).
+- **Deployment:** two stages, backend before frontend, each from its own commit. See
+  [fit-14-deployment-runbook.md](fit-14-deployment-runbook.md). No database script is needed; the change is
+  additive.
+- Name editing (FIT-13, `PATCH /api/users/me`) and the read-only email are unchanged.
 
 ## FIT-15 — Fitness Goals and Training Preferences (outline)
 
@@ -205,4 +225,5 @@ Goal: track real weight changes over time and give users control over account ac
 | Profile UI design reference image | Product owner | Not received yet; FIT-13 follows section 6 and needs a visual comparison once it arrives |
 | Full-resolution licensed hero image | Product owner | Pending; placeholder until then |
 | Hero image licence and attribution terms | Product owner | To confirm before release |
-| Detailed requirements for FIT-14 to FIT-17 | Product owner | Outlines above, to be confirmed |
+| Detailed requirements for FIT-15 to FIT-17 | Product owner | Outlines above, to be confirmed |
+| Remove the pre-FIT-14 `age` input from the API | Engineering | After installed apps have updated (e.g. with FIT-17); responses keep `age` |

@@ -209,7 +209,8 @@ The API log contained no email, password or profile values.
 - **Not verified against the production Atlas cluster.** Atlas clusters, including the free tier, are replica sets,
   so transactions are expected to work; the API checks this at start-up and refuses to start otherwise.
 - **Age is stored as entered** and does not increase over time. If future modules need the current age, store a
-  birth year instead (a schema change plus a one-time prompt).
+  birth year instead (a schema change plus a one-time prompt). *Resolved in FIT-14: see
+  [fit-14-birth-year-qa-report.md](fit-14-birth-year-qa-report.md).*
 - Sex is limited to male/female, as specified; it is used only for future calculations.
 - When onboarding is completed in one tab, other open tabs notice on reload (submitting there again is treated as
   done, not as an error).

@@ -1,4 +1,4 @@
-import { Dumbbell, LogOut, Ruler, Settings2, Target, UserRound } from 'lucide-react'
+import { CalendarPlus, Dumbbell, LogOut, Ruler, Settings2, Target, UserRound } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import ErrorFallback from '@/components/feedback/ErrorFallback'
@@ -14,8 +14,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { getErrorFeedback } from '@/services/api/error-feedback'
 import { getFitnessProfile } from '@/services/api/fitness-profile'
 import type { AuthUser } from '@/types/auth'
-import type { FitnessProfile } from '@/types/fitness-profile'
-import { describeProfile } from '@/utils/fitness-profile'
+import type { FitnessProfile, FitnessProfileField } from '@/types/fitness-profile'
+import { describeAge, describeProfile } from '@/utils/fitness-profile'
 
 type SectionId = 'personal' | 'body' | 'goals' | 'training'
 
@@ -35,6 +35,8 @@ function ProfileView() {
   // The latest saved profile (after an edit); otherwise the loaded one.
   const [saved, setSaved] = useState<FitnessProfile | null>(null)
   const [editing, setEditing] = useState<SectionId | null>(null)
+  // Field to focus when a card's form opens from a shortcut rather than its Edit button.
+  const [focusField, setFocusField] = useState<FitnessProfileField | undefined>()
   const [status, setStatus] = useState<{ section: SectionId; text: string } | null>(null)
 
   useEffect(() => {
@@ -46,8 +48,9 @@ function ProfileView() {
   const loading = load.state.status === 'idle' || load.state.status === 'loading'
   const profile = saved ?? (load.state.status === 'success' ? load.state.data : null)
 
-  const toggle = (section: SectionId) => {
+  const toggle = (section: SectionId, field?: FitnessProfileField) => {
     setStatus(null)
+    setFocusField(field)
     setEditing((current) => (current === section ? null : section))
   }
   const finish = (section: SectionId, changed: boolean) => {
@@ -66,6 +69,7 @@ function ProfileView() {
       <FitnessSectionForm
         profile={profile}
         fields={fields}
+        focusField={focusField}
         onCancel={() => finish(section, false)}
         onSaved={(updated) => {
           if (updated) setSaved(updated)
@@ -118,9 +122,34 @@ function ProfileView() {
     fitnessCards = {
       body: (
         <ProfileSectionCard title="Body Information" icon={<Ruler />} {...cardProps('body')} form={fitnessCard('body', BodyMetricsFields)}>
-          <SummaryList
-            rows={(['sex', 'age', 'heightCm', 'weightKg'] as const).map((field) => ({ label: PROFILE_FIELD_LABELS[field], value: text[field] }))}
-          />
+          <div className="flex flex-col gap-4">
+            <SummaryList
+              rows={[
+                { label: PROFILE_FIELD_LABELS.sex, value: text.sex },
+                { label: PROFILE_FIELD_LABELS.birthYear, value: text.birthYear },
+                { label: 'Age', value: describeAge(profile) },
+                { label: PROFILE_FIELD_LABELS.heightCm, value: text.heightCm },
+                { label: PROFILE_FIELD_LABELS.weightKg, value: text.weightKg },
+              ]}
+            />
+            {profile.birthYear === null && (
+              <Alert
+                title="Add your birth year"
+                action={
+                  <Button
+                    variant="secondary"
+                    leftIcon={<CalendarPlus aria-hidden="true" />}
+                    disabled={editing !== null}
+                    onClick={() => toggle('body', 'birthYear')}
+                  >
+                    Add birth year
+                  </Button>
+                }
+              >
+                Your age is saved as you entered it ({profile.age}) and doesn’t update. With your birth year, it stays up to date.
+              </Alert>
+            )}
+          </div>
         </ProfileSectionCard>
       ),
       goals: (
@@ -187,7 +216,9 @@ function AccountSettingsCard({ user }: { user: AuthUser }) {
           <span className="text-body-sm text-foreground-muted" aria-hidden="true">
             Theme
           </span>
-          <ThemeToggle />
+          {/* Below sm the toggle has its own row: it fills it and its options share the width, so it
+              fits a 320 px screen (its natural width is wider than the card there). */}
+          <ThemeToggle className="max-sm:w-full max-sm:[&>div]:w-full max-sm:[&_label]:min-w-0 max-sm:[&_label]:flex-1 max-sm:[&_label]:gap-1.5 max-sm:[&_label]:px-2" />
         </div>
         {error && (
           <Alert variant="danger" live>

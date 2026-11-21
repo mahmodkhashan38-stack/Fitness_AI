@@ -27,9 +27,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Test coverage
+# Test coverage and browser-test output
 coverage/
 *.lcov
+/test-results/
+/playwright-report/
+/blob-report/
 
 # Editor directories and files
 .vscode/*

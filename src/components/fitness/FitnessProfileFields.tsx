@@ -1,6 +1,7 @@
 import { Input, RadioCardGroup } from '@/components/ui'
 import { GOAL_OPTIONS, PROFILE_LIMITS, SEX_OPTIONS, TRAINING_DAY_OPTIONS } from '@/constants/fitness-profile'
 import type { FitnessProfileErrors, FitnessProfileField, FitnessProfileFormValues } from '@/types/fitness-profile'
+import { birthYearRange } from '@/utils/fitness-profile'
 
 export interface FitnessProfileFieldsProps {
   values: FitnessProfileFormValues
@@ -10,15 +11,22 @@ export interface FitnessProfileFieldsProps {
   /** Registers each control so a parent can focus the first invalid one. */
   fieldRef?: (field: FitnessProfileField) => (element: HTMLInputElement | null) => void
   disabled?: boolean
+  /**
+   * The age stored for a profile saved before FIT-14 that has no birth year yet. The birth year is
+   * then optional: leaving it blank keeps this age.
+   */
+  savedAge?: number
 }
 
 /**
- * Body measurements: sex, age, height, weight. Metric units, shown as suffixes.
+ * Body measurements: sex, birth year, height, weight. Metric units, shown as suffixes.
  * Text inputs with numeric keypads (iOS Safari's type="number" accepts letters and
  * changes values on scroll); the values are validated as numbers.
  */
-export function BodyMetricsFields({ values, errors, onChange, fieldRef, disabled }: FitnessProfileFieldsProps) {
-  const { age, heightCm, weightKg } = PROFILE_LIMITS
+export function BodyMetricsFields({ values, errors, onChange, fieldRef, disabled, savedAge }: FitnessProfileFieldsProps) {
+  const { heightCm, weightKg } = PROFILE_LIMITS
+  const years = birthYearRange()
+  const addingBirthYear = savedAge !== undefined
   return (
     <div className="flex flex-col gap-5">
       <RadioCardGroup
@@ -33,20 +41,24 @@ export function BodyMetricsFields({ values, errors, onChange, fieldRef, disabled
         error={errors.sex}
       />
       <Input
-        ref={fieldRef?.('age')}
-        label="Age"
-        name="age"
+        ref={fieldRef?.('birthYear')}
+        label="Birth year"
+        name="birthYear"
         inputMode="numeric"
-        autoComplete="off"
+        autoComplete="bday-year"
         enterKeyHint="next"
-        suffix="years"
-        required
+        placeholder={addingBirthYear ? undefined : 'e.g. 1998'}
+        required={!addingBirthYear}
         disabled={disabled}
-        maxLength={3}
-        helperText={`${age.min}–${age.max} years.`}
-        value={values.age}
-        onChange={(event) => onChange('age', event.target.value)}
-        error={errors.age}
+        maxLength={4}
+        helperText={
+          addingBirthYear
+            ? `Your saved age is ${savedAge}. Add your birth year so your age stays up to date, or leave this blank to keep it.`
+            : `${years.min}–${years.max}. Only the year is stored; your age updates automatically.`
+        }
+        value={values.birthYear}
+        onChange={(event) => onChange('birthYear', event.target.value)}
+        error={errors.birthYear}
       />
       <div className="grid gap-5 sm:grid-cols-2">
         <Input

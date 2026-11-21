@@ -6,6 +6,7 @@ import RegisterForm from '@/features/auth/RegisterForm'
 import type { AuthContextValue } from '@/hooks/useAuth'
 import { ApiError } from '@/services/api/errors'
 import { createAuthValue, TEST_USER, TestAuthProvider } from '@/test/auth'
+import { birthYearFor } from '@/test/fitness-profile'
 
 function renderForm(form: 'login' | 'register', auth: AuthContextValue, path = `/${form}`) {
   const router = createMemoryRouter(
@@ -143,9 +144,9 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
     type('Password', password)
     await next()
   }
-  async function fillBody({ age = '29', height = '175,5', weight = '72.4' } = {}) {
+  async function fillBody({ birthYear = '1997', height = '175,5', weight = '72.4' } = {}) {
     await choose(/^Sex/, 'Female')
-    type('Age', age)
+    type('Birth year', birthYear)
     type('Height', height)
     type('Weight', weight)
     await next()
@@ -196,7 +197,10 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
     expect(progress()).toBe('Step 2 of 4: Body')
     expect(document.activeElement).toBe(heading())
     expect(heading().textContent).toBe('About you')
-    expect(field('Age').inputMode).toBe('numeric')
+    expect(field('Birth year').inputMode).toBe('numeric')
+    // Browsers and password managers can fill in the birth year.
+    expect(field('Birth year').getAttribute('autocomplete')).toBe('bday-year')
+    expect(field('Birth year').required).toBe(true)
     expect(field('Height').inputMode).toBe('decimal')
     expect(field('Weight').inputMode).toBe('decimal')
     expect(screen.getByText('cm')).toBeTruthy()
@@ -208,7 +212,7 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
     await fillAccount()
     await next()
     expect(screen.getByText('Select your sex.')).toBeTruthy()
-    expect(screen.getByText('Enter your age.')).toBeTruthy()
+    expect(screen.getByText('Enter your birth year.')).toBeTruthy()
     expect(screen.getByText('Enter your height in centimeters.')).toBeTruthy()
     expect(screen.getByText('Enter your weight in kilograms.')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Male' }))
@@ -217,9 +221,10 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
   })
 
   it.each([
-    [{ age: '15' }, 'Age must be between 16 and 100.'],
-    [{ age: '29.5' }, 'Enter your age in whole years.'],
-    [{ age: 'abc' }, 'Enter your age.'],
+    [{ birthYear: String(birthYearFor(15)) }, `Birth year must be between ${birthYearFor(100)} and ${birthYearFor(16)}.`],
+    [{ birthYear: '29' }, `Birth year must be between ${birthYearFor(100)} and ${birthYearFor(16)}.`],
+    [{ birthYear: '1990.5' }, 'Enter your birth year as a 4-digit year.'],
+    [{ birthYear: 'abc' }, 'Enter your birth year.'],
     [{ height: '99' }, 'Height must be between 100 and 250 cm.'],
     [{ height: '1.80' }, 'Height must be between 100 and 250 cm.'],
     [{ weight: '301' }, 'Weight must be between 30 and 300 kg.'],
@@ -235,10 +240,10 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
   it('clears a field error as soon as the field is edited', async () => {
     renderForm('register', createAuthValue({ status: 'unauthenticated' }))
     await fillAccount()
-    await fillBody({ age: '12' })
-    expect(field('Age').getAttribute('aria-invalid')).toBe('true')
-    type('Age', '30')
-    expect(field('Age').getAttribute('aria-invalid')).toBeNull()
+    await fillBody({ birthYear: '2030' })
+    expect(field('Birth year').getAttribute('aria-invalid')).toBe('true')
+    type('Birth year', '1996')
+    expect(field('Birth year').getAttribute('aria-invalid')).toBeNull()
   })
 
   it('requires a goal and training days', async () => {
@@ -269,10 +274,10 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
   it('keeps every value when going back and forward', async () => {
     renderForm('register', createAuthValue({ status: 'unauthenticated' }))
     await fillAccount('Alex', 'alex@example.com')
-    await fillBody({ age: '41' })
+    await fillBody({ birthYear: '1985' })
     await choose(/^Main goal/, 'Fat Loss')
     await back()
-    expect(field('Age').value).toBe('41')
+    expect(field('Birth year').value).toBe('1985')
     expect((screen.getByRole('radio', { name: 'Female' }) as HTMLInputElement).checked).toBe(true)
     await back()
     expect(field('Name').value).toBe('Alex')
@@ -303,7 +308,7 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
 
     expect(progress()).toBe('Step 4 of 4: Review')
     const review = screen.getByRole('heading', { level: 2 }).closest('form')!
-    for (const text of ['Alex', 'alex@example.com', 'Female', '29 years', '175.5 cm', '72.4 kg', 'Muscle Gain', '4 days']) {
+    for (const text of ['Alex', 'alex@example.com', 'Female', '1997', '175.5 cm', '72.4 kg', 'Muscle Gain', '4 days']) {
       expect(within(review).getByText(text)).toBeTruthy()
     }
     expect(within(review).queryByText('correct horse battery staple')).toBeNull()
@@ -315,7 +320,7 @@ describe('RegisterForm (multi-step registration with onboarding)', () => {
       name: 'Alex',
       email: 'alex@example.com',
       password: 'correct horse battery staple',
-      profile: { sex: 'female', age: 29, heightCm: 175.5, weightKg: 72.4, goal: 'muscle_gain', trainingDaysPerWeek: 4 },
+      profile: { sex: 'female', birthYear: 1997, heightCm: 175.5, weightKg: 72.4, goal: 'muscle_gain', trainingDaysPerWeek: 4 },
     })
     expect(router.state.location.pathname).toBe('/workouts')
   })

@@ -6,18 +6,20 @@ import { useProfileForm } from '@/features/account/useProfileForm'
 import { useAuth } from '@/hooks/useAuth'
 import { toAuthFormError } from '@/services/api/auth'
 import { updateFitnessProfile } from '@/services/api/fitness-profile'
-import type { FitnessProfile } from '@/types/fitness-profile'
+import type { FitnessProfile, FitnessProfileField } from '@/types/fitness-profile'
 import { NAME_MAX_LENGTH, validateDisplayName } from '@/utils/account'
 import { changedProfileFields, toProfileFormValues } from '@/utils/fitness-profile'
 
-/** Moves focus to the first field when an edit form opens. */
-function useFocusFirstField() {
+/** Moves focus to the requested field, or else the first one, when an edit form opens. */
+function useFocusOnOpen(field?: string) {
   const ref = useRef<HTMLFormElement>(null)
   useEffect(() => {
     // For a radio group, focus the selected option (where arrow keys continue), not the first one.
     const inputs = [...(ref.current?.querySelectorAll<HTMLInputElement>('input') ?? [])]
-    inputs.find((input) => input.type !== 'radio' || input.checked)?.focus()
-  }, [])
+    const requested = field ? inputs.find((input) => input.name === field) : undefined
+    const target = requested ?? inputs.find((input) => input.type !== 'radio' || input.checked)
+    target?.focus()
+  }, [field])
   return ref
 }
 
@@ -34,8 +36,18 @@ function FormActions({ submitting, onCancel }: { submitting: boolean; onCancel: 
   )
 }
 
-function EditForm({ onSubmit, busy, children }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; busy: boolean; children: ReactNode }) {
-  const ref = useFocusFirstField()
+function EditForm({
+  onSubmit,
+  busy,
+  focusField,
+  children,
+}: {
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  busy: boolean
+  focusField?: string
+  children: ReactNode
+}) {
+  const ref = useFocusOnOpen(focusField)
   return (
     <form ref={ref} noValidate aria-busy={busy} onSubmit={onSubmit} className="flex flex-col gap-5">
       {children}
@@ -114,24 +126,29 @@ export function PersonalInfoForm({ onDone }: { onDone: (saved: boolean) => void 
 /**
  * Edits part of the fitness profile with the FIT-12 fields and rules. The form holds every value
  * (the other fields come from the stored profile and are valid), shows only this card's fields,
- * and sends only what changed.
+ * and sends only what changed. A profile saved before FIT-14 may keep a blank birth year (FIT-14).
  */
 export function FitnessSectionForm({
   profile,
   fields: Fields,
+  focusField,
   onSaved,
   onCancel,
 }: {
   profile: FitnessProfile
   fields: ComponentType<FitnessProfileFieldsProps>
+  /** Field to focus when the form opens (default: the first one). */
+  focusField?: FitnessProfileField
   /** Called with the updated profile, or null when nothing changed (no request is sent). */
   onSaved: (profile: FitnessProfile | null) => void
   onCancel: () => void
 }) {
+  const missingBirthYear = profile.birthYear === null
   const form = useProfileForm({
     initialValues: toProfileFormValues(profile),
-    save: async (input) => {
-      const changes = changedProfileFields(profile, input)
+    validation: { birthYearOptional: missingBirthYear },
+    save: async (values) => {
+      const changes = changedProfileFields(profile, values)
       onSaved(Object.keys(changes).length === 0 ? null : await updateFitnessProfile(changes))
     },
   })
@@ -139,6 +156,7 @@ export function FitnessSectionForm({
   return (
     <EditForm
       busy={form.submitting}
+      focusField={focusField}
       onSubmit={(event) => {
         event.preventDefault()
         void form.submit()
@@ -149,7 +167,14 @@ export function FitnessSectionForm({
           {form.message}
         </Alert>
       )}
-      <Fields values={form.values} errors={form.errors} onChange={form.onChange} fieldRef={form.fieldRef} disabled={form.submitting} />
+      <Fields
+        values={form.values}
+        errors={form.errors}
+        onChange={form.onChange}
+        fieldRef={form.fieldRef}
+        disabled={form.submitting}
+        savedAge={missingBirthYear ? profile.age : undefined}
+      />
       <FormActions submitting={form.submitting} onCancel={onCancel} />
     </EditForm>
   )

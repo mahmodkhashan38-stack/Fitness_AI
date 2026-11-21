@@ -39,6 +39,7 @@ Frontend (repository root):
 | `npm run lint`      | Run ESLint (includes import-boundary rules) |
 | `npm test`          | Run unit tests once (Vitest)             |
 | `npm run test:watch`| Run tests in watch mode                  |
+| `npm run test:e2e`  | Browser tests (Playwright, Chromium): builds the app, serves it with `vite preview` and mocks the API. First run: `npx playwright install chromium` |
 | `npm run preview`   | Preview the production build (service worker active; `/api` forwarded to the backend) |
 
 Backend (run inside `backend/`):
@@ -193,7 +194,7 @@ Endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/lo
 `PATCH /api/users/me`. All app pages except Log in and Create account require a session.
 Design, security decisions and test results: [docs/fit-11-auth-qa-report.md](docs/fit-11-auth-qa-report.md).
 
-**Fitness onboarding (FIT-12).** Registration is a four-step form (account → body → goals → review). Sex, age,
+**Fitness onboarding (FIT-12).** Registration is a four-step form (account → body → goals → review). Sex, birth year (age before FIT-14),
 height (cm), weight (kg), main goal and training days per week are mandatory: `POST /api/auth/register` takes
 them as `profile` and creates the user and their fitness profile in **one MongoDB transaction**, so an account
 never exists without its profile. Accounts created before FIT-12 are sent to `/onboarding` until they complete

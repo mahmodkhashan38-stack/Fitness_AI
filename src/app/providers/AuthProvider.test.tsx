@@ -162,7 +162,7 @@ describe('AuthProvider', () => {
     await settle()
     expect(latest.current!.user!.onboardingCompleted).toBe(false)
 
-    fetchMock.mockResolvedValueOnce(Response.json({ profile: { ...TEST_PROFILE_INPUT, onboardingCompleted: true, onboardingCompletedAt: 'x', updatedAt: 'x' } }, { status: 201 }))
+    fetchMock.mockResolvedValueOnce(Response.json({ profile: { ...TEST_PROFILE_INPUT, age: 29, onboardingCompleted: true, onboardingCompletedAt: 'x', updatedAt: 'x' } }, { status: 201 }))
     await act(async () => auth.completeOnboarding(TEST_PROFILE_INPUT))
     const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
     expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/api/users/me/fitness-profile', 'POST', TEST_PROFILE_INPUT])
@@ -183,7 +183,7 @@ describe('AuthProvider', () => {
     fetchMock.mockResolvedValueOnce(Response.json({ user: { ...user, onboardingCompleted: false } }))
     renderProvider()
     await settle()
-    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'VALIDATION_FAILED', fields: { age: 'x' } } }, { status: 400 }))
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'VALIDATION_FAILED', fields: { birthYear: 'x' } } }, { status: 400 }))
     await act(async () => {
       await expect(auth.completeOnboarding(TEST_PROFILE_INPUT)).rejects.toMatchObject({ kind: 'http', status: 400 })
     })

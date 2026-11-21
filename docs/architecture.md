@@ -385,7 +385,17 @@ jsdom does not implement `<dialog>.showModal()` or the Popover API. Dialog tests
 and test the component's own logic; component tests in jsdom therefore exercise the account menu's
 non-popover fallback. Native behaviour (focus trapping, top layer, popover light-dismiss) and layout,
 contrast and responsiveness were verified in a real browser during Sprint 1 QA
-(see `docs/sprint-1-qa-report.md`); those browser checks are not yet part of the repository.
+(see `docs/sprint-1-qa-report.md`).
+
+`npm run test:e2e` runs Playwright browser tests (`e2e/`, config in `playwright.config.ts`) for what jsdom
+can't measure. They run against the production build served by `vite preview`, with `/api` answered per test
+by `e2e/support/mock-api.ts` (typed with the app's own `AuthUser` and `FitnessProfile`; unexpected API calls
+fail the test), so they need no backend. The service worker is blocked so it can't bypass the mocks.
+`e2e/responsive-overflow.spec.ts` checks that no page or state is wider than the viewport, comparing the real
+`document.documentElement.scrollWidth` with the viewport width (not `window.innerWidth`, which grows with the
+overflow under mobile emulation): public pages, registration steps, app pages, Profile cards and forms
+(including long names and emails and the FIT-14 birth-year prompt) and onboarding, at 320, 360, 375, 390 and
+414 px (phone emulation) and 768, 1024, 1280 and 1440 px, in light and dark themes.
 
 Use `element.click()` rather than `fireEvent.click` to assert that a *disabled* control can't be toggled:
 `fireEvent` dispatches a synthetic event that browsers deliver even to disabled inputs.
@@ -513,7 +523,7 @@ The design follows the frontend contracts in `src/types/models/`.
 | Collection | Fields (beyond `_id`, timestamps) | Indexes | Notes |
 |---|---|---|---|
 | `users` | `email`, `name`, `passwordHash` | unique `email` (stored lower-case, trimmed) | Authentication data only. `passwordHash` excluded from queries by default (`select: false`). |
-| `fitnessprofiles` (**implemented**, FIT-12) | `userId`, `sex`, `age`, `heightCm`, `weightKg`, `goal`, `trainingDaysPerWeek`, `onboardingCompletedAt` | unique `userId` | One per user, created together with the user in one transaction (or by onboarding for older accounts). A separate collection rather than embedded in `users`, so workout planning, nutrition targets, progress and the AI coach can read it without loading authentication data. Its existence means onboarding is complete. See section 11. |
+| `fitnessprofiles` (**implemented**, FIT-12; birth year FIT-14) | `userId`, `sex`, `birthYear` (or `age` on profiles saved before FIT-14, until the user adds a birth year; exactly one), `heightCm`, `weightKg`, `goal`, `trainingDaysPerWeek`, `onboardingCompletedAt` | unique `userId` | One per user, created together with the user in one transaction (or by onboarding for older accounts). A separate collection rather than embedded in `users`, so workout planning, nutrition targets, progress and the AI coach can read it without loading authentication data. Its existence means onboarding is complete. See section 11. |
 | `workouts` | `userId`, `name`, `date` (Date), `exercises[]` | `{ userId: 1, date: -1 }` | Exercises are embedded subdocuments (`name`, `muscleGroup`, `sets[{ repetitions, weightKg \| null, completed }]`); their `_id` is the frontend `Exercise.id`. Workouts are read and written as a unit; limit e.g. 50 exercises × 50 sets. |
 | `exercises` | — | — | **Not a separate collection for now**: in the frontend model an exercise belongs to one workout. A shared exercise catalogue (names, muscle groups, instructions) can become its own collection later and be referenced by id. |
 | `nutritionEntries` | `userId`, `date` (IsoDate), `foodName`, `serving { amount, unit }`, `caloriesKcal`, `proteinG`, `carbohydratesG`, `fatG`, `loggedAt?` (Date) | `{ userId: 1, date: -1 }` | One document per logged food (unbounded per day, so not embedded). `date` is a proposed addition to the frontend model: `loggedAt` is optional, and daily totals need a local-day key. |
@@ -616,9 +626,9 @@ Contracts, validation rules and test results: [fit-12-registration-onboarding-qa
 
 | Path | Responsibility |
 |---|---|
-| `src/fitness/validation.ts` | Allowed values and ranges, complete profile (registration, onboarding) and partial update parsing |
+| `src/fitness/validation.ts` | Allowed values and ranges (birth year range from the current UTC year), complete profile (registration, onboarding) and partial update parsing; still accepts the pre-FIT-14 `age` |
 | `src/models/fitness-profile.ts` | `FitnessProfile` model (unique `userId`, schema ranges without values in messages), public shape |
-| `src/services/fitness-profile-service.ts` | get / complete onboarding (once) / update (`$set` of validated fields), always by session user |
+| `src/services/fitness-profile-service.ts` | get / complete onboarding (once) / update (`$set` of validated fields; a birth year unsets the stored age), always by session user |
 | `src/routes/fitness-profile.ts` | `GET`, `POST`, `PATCH /api/users/me/fitness-profile` |
 | `src/services/auth-service.ts` | `register` writes user + profile in one transaction; every user payload carries `onboardingCompleted` |
 | `src/database/connection.ts` | `supportsTransactions()`; `server.ts` refuses to start without a replica set |

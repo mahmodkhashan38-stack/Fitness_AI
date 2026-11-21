@@ -1,6 +1,9 @@
 import type { FitnessGoal, FitnessProfileField, Sex } from '@/types/fitness-profile'
 
-/** Inclusive limits, identical to the API (backend/src/fitness/validation.ts). */
+/**
+ * Inclusive limits, identical to the API (backend/src/fitness/validation.ts). Birth years are
+ * limited through `age`: the user turns 16–100 this calendar year (see birthYearRange).
+ */
 export const PROFILE_LIMITS = {
   age: { min: 16, max: 100 },
   heightCm: { min: 100, max: 250 },
@@ -9,7 +12,7 @@ export const PROFILE_LIMITS = {
 } as const
 
 /** Display and validation order. */
-export const PROFILE_FIELDS: readonly FitnessProfileField[] = ['sex', 'age', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek']
+export const PROFILE_FIELDS: readonly FitnessProfileField[] = ['sex', 'birthYear', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek']
 
 export const SEX_OPTIONS: readonly { value: Sex; label: string }[] = [
   { value: 'male', label: 'Male' },
@@ -30,7 +33,7 @@ export const TRAINING_DAY_OPTIONS: readonly { value: string; label: string }[] =
 
 export const PROFILE_FIELD_LABELS: Record<FitnessProfileField, string> = {
   sex: 'Sex',
-  age: 'Age',
+  birthYear: 'Birth year',
   heightCm: 'Height',
   weightKg: 'Weight',
   goal: 'Main goal',

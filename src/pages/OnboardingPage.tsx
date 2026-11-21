@@ -1,5 +1,5 @@
 import { ClipboardList, LogOut } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Alert, Button, Card } from '@/components/ui'
 import { ROUTES } from '@/constants/routes'
@@ -15,6 +15,7 @@ function OnboardingPage() {
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
+  const accountId = useId()
 
   const onLogout = async () => {
     setLogoutError(null)
@@ -41,14 +42,29 @@ function OnboardingPage() {
         </p>
       </div>
       <OnboardingForm />
-      <div className="flex flex-col items-start gap-2 border-t border-border pt-4">
+      <div className="flex min-w-0 flex-col items-start gap-2 border-t border-border pt-4">
         {logoutError && (
           <Alert variant="danger" live>
             {logoutError}
           </Alert>
         )}
-        <Button variant="ghost" size="sm" leftIcon={<LogOut aria-hidden="true" />} loading={loggingOut} loadingText="Logging out…" onClick={() => void onLogout()}>
-          Log out{user ? ` (${user.email})` : ''}
+        {/* The email is plain text that can wrap anywhere, so a long address never widens the page;
+            the button keeps a short label and is described by it. */}
+        {user && (
+          <p id={accountId} className="max-w-full text-body-sm text-foreground-muted [overflow-wrap:anywhere]">
+            Signed in as <span className="font-medium text-foreground">{user.email}</span>
+          </p>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<LogOut aria-hidden="true" />}
+          loading={loggingOut}
+          loadingText="Logging out…"
+          aria-describedby={user ? accountId : undefined}
+          onClick={() => void onLogout()}
+        >
+          Log out
         </Button>
       </div>
     </Card>

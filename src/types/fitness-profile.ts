@@ -9,8 +9,8 @@ export type FitnessGoal = 'muscle_gain' | 'fat_loss' | 'maintenance' | 'general_
 /** What the user submits at registration or onboarding. Metric units only. */
 export interface FitnessProfileInput {
   sex: Sex
-  /** Whole years. */
-  age: number
+  /** Four-digit year (FIT-14): the age is derived from it, so it never goes stale. */
+  birthYear: number
   heightCm: number
   weightKg: number
   goal: FitnessGoal
@@ -21,7 +21,14 @@ export interface FitnessProfileInput {
 export type FitnessProfileField = keyof FitnessProfileInput
 
 /** The stored profile as returned by the API. */
-export interface FitnessProfile extends FitnessProfileInput {
+export interface FitnessProfile extends Omit<FitnessProfileInput, 'birthYear'> {
+  /**
+   * null for a profile saved before FIT-14 whose user hasn't added a birth year yet; such a
+   * profile keeps the age the user entered.
+   */
+  birthYear: number | null
+  /** Whole years: the age reached this calendar year, or the age as entered when birthYear is null. */
+  age: number
   onboardingCompleted: true
   /** ISO 8601 instant. */
   onboardingCompletedAt: string
@@ -35,7 +42,7 @@ export interface FitnessProfile extends FitnessProfileInput {
  */
 export interface FitnessProfileFormValues {
   sex: Sex | ''
-  age: string
+  birthYear: string
   heightCm: string
   weightKg: string
   goal: FitnessGoal | ''

@@ -7,7 +7,7 @@ import {
   toFitnessProfileFormError,
   updateFitnessProfile,
 } from '@/services/api/fitness-profile'
-import { TEST_PROFILE, TEST_PROFILE_INPUT } from '@/test/fitness-profile'
+import { LEGACY_PROFILE, TEST_PROFILE, TEST_PROFILE_INPUT } from '@/test/fitness-profile'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const httpError = (status: number, body: unknown) => new ApiError({ kind: 'http', status, body, message: 'x' })
@@ -56,11 +56,23 @@ describe('fitness profile API', () => {
     { ...TEST_PROFILE, sex: 'other' },
     { ...TEST_PROFILE, goal: 'bulk' },
     { ...TEST_PROFILE, age: '29' },
+    { ...TEST_PROFILE, age: undefined },
+    { ...TEST_PROFILE, birthYear: '1997' },
     { ...TEST_PROFILE, onboardingCompleted: false },
     { ...TEST_PROFILE, updatedAt: undefined },
     null,
   ])('rejects a malformed profile payload %#', (payload) => {
     expect(() => parseFitnessProfile(payload)).toThrow()
+  })
+
+  it('accepts a profile saved before FIT-14: no birth year yet, the age as entered', () => {
+    expect(parseFitnessProfile(LEGACY_PROFILE)).toEqual(LEGACY_PROFILE)
+  })
+
+  it('reads a response from a pre-FIT-14 API (no birthYear, during a deployment) as a profile without one', () => {
+    const withoutBirthYear: Record<string, unknown> = { ...LEGACY_PROFILE }
+    delete withoutBirthYear.birthYear
+    expect(parseFitnessProfile(withoutBirthYear)).toEqual(LEGACY_PROFILE)
   })
 
   it('drops unexpected fields from the payload', () => {
@@ -71,8 +83,8 @@ describe('fitness profile API', () => {
 describe('toFitnessProfileFormError', () => {
   it('keeps profile field messages and ignores unknown fields', () => {
     expect(
-      toFitnessProfileFormError(httpError(400, { error: { code: 'VALIDATION_FAILED', fields: { age: 'Age must be between 16 and 100.', userId: 'x' } } })),
-    ).toEqual({ message: null, fields: { age: 'Age must be between 16 and 100.' } })
+      toFitnessProfileFormError(httpError(400, { error: { code: 'VALIDATION_FAILED', fields: { birthYear: 'Birth year must be between 1926 and 2010.', age: 'x', userId: 'x' } } })),
+    ).toEqual({ message: null, fields: { birthYear: 'Birth year must be between 1926 and 2010.' } })
   })
 
   it.each([

@@ -28,7 +28,7 @@ const REGISTRATION_STEPS: readonly Step[] = [
     title: 'Body',
     heading: 'About you',
     description: 'Used to personalise your training and targets. Only you can see it.',
-    fields: ['sex', 'age', 'heightCm', 'weightKg'],
+    fields: ['sex', 'birthYear', 'heightCm', 'weightKg'],
   },
   {
     title: 'Goals',
@@ -222,7 +222,7 @@ function RegisterForm() {
           {summary && (
             <>
               <ReviewSection title="Body" onEdit={() => goTo(1)} disabled={form.submitting}>
-                {(['sex', 'age', 'heightCm', 'weightKg'] as const).map((field) => (
+                {(['sex', 'birthYear', 'heightCm', 'weightKg'] as const).map((field) => (
                   <ReviewRow key={field} label={PROFILE_FIELD_LABELS[field]} value={summary[field]} />
                 ))}
               </ReviewSection>

@@ -63,6 +63,16 @@ describe('real routes for an account without a fitness profile', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toBeTruthy()
   })
 
+  it('shows the signed-in email as wrappable text and keeps a short, described Log out button', () => {
+    const email = 'a.very.long.address.for.someone@subdomain.example-company.com'
+    renderApp('/onboarding', pending({ user: { ...TEST_USER, email, onboardingCompleted: false } }))
+    const button = screen.getByRole('button', { name: 'Log out' })
+    const description = document.getElementById(button.getAttribute('aria-describedby') ?? '')
+    expect(description?.textContent).toBe(`Signed in as ${email}`)
+    // Long addresses wrap instead of widening the page (measured in the browser tests).
+    expect(description?.className).toContain('[overflow-wrap:anywhere]')
+  })
+
   it('reports a failed logout instead of pretending', async () => {
     const auth = pending({ logout: vi.fn(async () => Promise.reject(new Error('offline'))) })
     const router = renderApp('/onboarding', auth)
@@ -104,14 +114,14 @@ describe('real routes for an account without a fitness profile', () => {
       act(async () => within(screen.getByRole('group', { name: group })).getByRole('radio', { name: option }).click())
     const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label, { exact: false }), { target: { value } })
     await choose(/^Sex/, 'Female')
-    type('Age', '33')
+    type('Birth year', '1993')
     type('Height', '165')
     type('Weight', '58')
     await choose(/^Main goal/, 'Maintenance')
     await choose(/^Training days per week/, '2')
     await act(async () => screen.getByRole('button', { name: 'Save and continue' }).click())
 
-    expect(save).toHaveBeenCalledWith({ sex: 'female', age: 33, heightCm: 165, weightKg: 58, goal: 'maintenance', trainingDaysPerWeek: 2 })
+    expect(save).toHaveBeenCalledWith({ sex: 'female', birthYear: 1993, heightCm: 165, weightKg: 58, goal: 'maintenance', trainingDaysPerWeek: 2 })
     await waitFor(() => expect(`${router.state.location.pathname}${router.state.location.search}`).toBe('/workouts?week=2'))
     expect(screen.getByRole('heading', { level: 1, name: 'Workouts' })).toBeTruthy()
     expect(screen.getAllByRole('navigation', { name: 'Primary' }).length).toBeGreaterThan(0)

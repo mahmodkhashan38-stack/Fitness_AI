@@ -3,7 +3,7 @@ import { BodyMetricsFields, GoalFields } from '@/components/fitness/FitnessProfi
 import { Alert, Button, Divider } from '@/components/ui'
 import { useProfileForm } from '@/features/account/useProfileForm'
 import { useAuth } from '@/hooks/useAuth'
-import { EMPTY_PROFILE_FORM } from '@/utils/fitness-profile'
+import { EMPTY_PROFILE_FORM, toProfileInput } from '@/utils/fitness-profile'
 
 /**
  * Fitness onboarding for accounts created before FIT-12. On success the auth state reports
@@ -11,7 +11,7 @@ import { EMPTY_PROFILE_FORM } from '@/utils/fitness-profile'
  */
 function OnboardingForm() {
   const { completeOnboarding } = useAuth()
-  const form = useProfileForm({ initialValues: EMPTY_PROFILE_FORM, save: completeOnboarding })
+  const form = useProfileForm({ initialValues: EMPTY_PROFILE_FORM, save: (values) => completeOnboarding(toProfileInput(values)) })
 
   return (
     <form

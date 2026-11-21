@@ -7,7 +7,7 @@ import type { AuthContextValue } from '@/hooks/useAuth'
 import { ThemeContext, type ThemeContextValue } from '@/hooks/useTheme'
 import { ApiError } from '@/services/api/errors'
 import { createAuthValue, TEST_USER, TestAuthProvider } from '@/test/auth'
-import { TEST_PROFILE } from '@/test/fitness-profile'
+import { birthYearFor, LEGACY_PROFILE, TEST_PROFILE } from '@/test/fitness-profile'
 
 let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
@@ -133,7 +133,11 @@ describe('Profile page: section cards', () => {
     expect(headings).toEqual(['Personal Information', 'Body Information', 'Fitness Goals', 'Training Preferences', 'Account Settings'])
     expect(within(card('Personal Information')).getByText(TEST_USER.email)).toBeTruthy()
     expect(within(card('Personal Information')).getByText('November 2026')).toBeTruthy()
-    for (const value of ['Female', '29 years', '168 cm', '61.5 kg']) expect(within(card('Body Information')).getByText(value)).toBeTruthy()
+    const body = within(card('Body Information'))
+    expect(body.getAllByRole('term').map((term) => term.textContent)).toEqual(['Sex', 'Birth year', 'Age', 'Height', 'Weight'])
+    expect(body.getAllByRole('definition').map((value) => value.textContent)).toEqual(['Female', String(birthYearFor(29)), '29 this year', '168 cm', '61.5 kg'])
+    // A complete profile isn't asked for anything.
+    expect(body.queryByRole('button', { name: 'Add birth year' })).toBeNull()
     expect(within(card('Fitness Goals')).getByText('Build strength and muscle size.')).toBeTruthy()
     expect(within(card('Training Preferences')).getByText('4 days per week')).toBeTruthy()
   })
@@ -163,11 +167,28 @@ describe('Profile page: section cards', () => {
     fetchMock.mockResolvedValueOnce(profileResponse())
     await renderProfile()
     await click(within(card('Body Information')).getByRole('button', { name: 'Edit body information' }))
-    fireEvent.change(field('Age'), { target: { value: '12' } })
+    fireEvent.change(field('Birth year'), { target: { value: String(birthYearFor(12)) } })
     await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
-    expect(screen.getByText('Age must be between 16 and 100.')).toBeTruthy()
-    expect(document.activeElement).toBe(field('Age'))
+    expect(screen.getByText(`Birth year must be between ${birthYearFor(100)} and ${birthYearFor(16)}.`)).toBeTruthy()
+    expect(document.activeElement).toBe(field('Birth year'))
     expect(patchCalls()).toHaveLength(0)
+  })
+
+  it('requires the birth year once it is stored: it can be changed but not removed', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse())
+    await renderProfile()
+    await click(within(card('Body Information')).getByRole('button', { name: 'Edit body information' }))
+    expect(field('Birth year').required).toBe(true)
+    fireEvent.change(field('Birth year'), { target: { value: '' } })
+    await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
+    expect(screen.getByText('Enter your birth year.')).toBeTruthy()
+    expect(patchCalls()).toHaveLength(0)
+
+    fireEvent.change(field('Birth year'), { target: { value: String(birthYearFor(30)) } })
+    fetchMock.mockResolvedValueOnce(profileResponse({ ...TEST_PROFILE, birthYear: birthYearFor(30), age: 30 }))
+    await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
+    expect(JSON.parse((patchCalls()[0]![1] as RequestInit).body as string)).toEqual({ birthYear: birthYearFor(30) })
+    expect(within(card('Body Information')).getByText('30 this year')).toBeTruthy()
   })
 
   it('shows server field errors and keeps the entered values', async () => {
@@ -238,6 +259,82 @@ describe('Profile page: section cards', () => {
     await act(async () => fireEvent.submit(save.closest('form')!))
     expect(patchCalls()).toHaveLength(1)
     await act(async () => resolve(profileResponse({ ...TEST_PROFILE, weightKg: 70 })))
+  })
+})
+
+describe('Profile page: profiles saved before FIT-14 (no birth year yet)', () => {
+  it('shows the age as entered and asks for the birth year, without guessing one', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    const body = within(card('Body Information'))
+    expect(body.getAllByRole('definition').map((value) => value.textContent)).toEqual(['Female', 'Not added', '41 years', '168 cm', '61.5 kg'])
+    expect(body.getByText('Add your birth year')).toBeTruthy()
+    expect(body.getByText(/saved as you entered it \(41\) and doesn’t update/)).toBeTruthy()
+  })
+
+  it('“Add birth year” opens the body form on the birth year, which may stay blank', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    await click(within(card('Body Information')).getByRole('button', { name: 'Add birth year' }))
+    expect(within(card('Body Information')).getByRole('button', { name: 'Close body information' }).getAttribute('aria-expanded')).toBe('true')
+    expect(document.activeElement).toBe(field('Birth year'))
+    expect(field('Birth year').value).toBe('')
+    expect(field('Birth year').required).toBe(false)
+    expect(screen.getByText(/Your saved age is 41\./)).toBeTruthy()
+    // The other cards are locked while this one is open.
+    expect((within(card('Fitness Goals')).getByRole('button', { name: 'Edit fitness goals' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('adding the birth year sends only it, then shows the derived age and stops asking', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    await click(within(card('Body Information')).getByRole('button', { name: 'Add birth year' }))
+    fireEvent.change(field('Birth year'), { target: { value: String(birthYearFor(42)) } })
+    fetchMock.mockResolvedValueOnce(profileResponse({ ...LEGACY_PROFILE, birthYear: birthYearFor(42), age: 42 }))
+    await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
+
+    expect(JSON.parse((patchCalls()[0]![1] as RequestInit).body as string)).toEqual({ birthYear: birthYearFor(42) })
+    const body = within(card('Body Information'))
+    expect(body.getByText('42 this year')).toBeTruthy()
+    expect(body.queryByRole('button', { name: 'Add birth year' })).toBeNull()
+    expect(body.getByRole('status').textContent).toBe('Saved.')
+    // Focus returns to the card's Edit button (the prompt that opened the form is gone).
+    expect(document.activeElement).toBe(body.getByRole('button', { name: 'Edit body information' }))
+  })
+
+  it('other edits work without a birth year and keep the stored age', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    await click(within(card('Body Information')).getByRole('button', { name: 'Edit body information' }))
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Female' }))
+    fireEvent.change(field('Weight'), { target: { value: '70' } })
+    fetchMock.mockResolvedValueOnce(profileResponse({ ...LEGACY_PROFILE, weightKg: 70 }))
+    await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
+    expect(JSON.parse((patchCalls()[0]![1] as RequestInit).body as string)).toEqual({ weightKg: 70 })
+
+    await click(within(card('Fitness Goals')).getByRole('button', { name: 'Edit fitness goals' }))
+    await click(screen.getByRole('radio', { name: 'Fat Loss' }))
+    fetchMock.mockResolvedValueOnce(profileResponse({ ...LEGACY_PROFILE, weightKg: 70, goal: 'fat_loss' }))
+    await click(within(card('Fitness Goals')).getByRole('button', { name: 'Save' }))
+    expect(JSON.parse((patchCalls()[1]![1] as RequestInit).body as string)).toEqual({ goal: 'fat_loss' })
+    expect(within(card('Body Information')).getByText('Add your birth year')).toBeTruthy()
+  })
+
+  it('still validates a birth year that is typed', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    await click(within(card('Body Information')).getByRole('button', { name: 'Add birth year' }))
+    fireEvent.change(field('Birth year'), { target: { value: '85' } })
+    await click(within(card('Body Information')).getByRole('button', { name: 'Save' }))
+    expect(screen.getByText(`Birth year must be between ${birthYearFor(100)} and ${birthYearFor(16)}.`)).toBeTruthy()
+    expect(patchCalls()).toHaveLength(0)
+  })
+
+  it('the prompt is disabled while another card is being edited', async () => {
+    fetchMock.mockResolvedValueOnce(profileResponse(LEGACY_PROFILE))
+    await renderProfile()
+    await click(within(card('Personal Information')).getByRole('button', { name: 'Edit personal information' }))
+    expect((within(card('Body Information')).getByRole('button', { name: 'Add birth year' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

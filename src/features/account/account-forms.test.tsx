@@ -14,7 +14,7 @@ const httpError = (status: number, body: unknown) => new ApiError({ kind: 'http'
 
 async function fillProfile() {
   await choose(/^Sex/, 'Male')
-  type('Age', '44')
+  type('Birth year', '1982')
   type('Height', '181')
   type('Weight', '90,5')
   await choose(/^Main goal/, 'General Fitness / Endurance')
@@ -40,7 +40,7 @@ describe('OnboardingForm (existing accounts)', () => {
     await submitOnboarding()
     for (const message of [
       'Select your sex.',
-      'Enter your age.',
+      'Enter your birth year.',
       'Enter your height in centimeters.',
       'Enter your weight in kilograms.',
       'Choose your main goal.',
@@ -57,7 +57,7 @@ describe('OnboardingForm (existing accounts)', () => {
     renderOnboarding(complete)
     await fillProfile()
     await submitOnboarding()
-    expect(complete).toHaveBeenCalledWith({ sex: 'male', age: 44, heightCm: 181, weightKg: 90.5, goal: 'general_fitness', trainingDaysPerWeek: 0 })
+    expect(complete).toHaveBeenCalledWith({ sex: 'male', birthYear: 1982, heightCm: 181, weightKg: 90.5, goal: 'general_fitness', trainingDaysPerWeek: 0 })
   })
 
   it('shows server field errors next to the field', async () => {

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { PROFILE_FIELDS } from '@/constants/fitness-profile'
 import { toFitnessProfileFormError } from '@/services/api/fitness-profile'
-import type { FitnessProfileErrors, FitnessProfileField, FitnessProfileFormValues, FitnessProfileInput } from '@/types/fitness-profile'
-import { toProfileInput, validateProfileForm } from '@/utils/fitness-profile'
+import type { FitnessProfileErrors, FitnessProfileField, FitnessProfileFormValues } from '@/types/fitness-profile'
+import { validateProfileForm, type ProfileValidationOptions } from '@/utils/fitness-profile'
 
 /**
  * State and submit logic shared by the onboarding and profile forms: values, client-side
@@ -11,10 +11,12 @@ import { toProfileInput, validateProfileForm } from '@/utils/fitness-profile'
 export function useProfileForm({
   initialValues,
   save,
+  validation,
 }: {
   initialValues: FitnessProfileFormValues
-  /** Receives validated input; resolves when saved. Errors are mapped for display. */
-  save: (input: FitnessProfileInput) => Promise<void>
+  /** Receives the values once they pass validation; resolves when saved. Errors are mapped for display. */
+  save: (values: FitnessProfileFormValues) => Promise<void>
+  validation?: ProfileValidationOptions
 }) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<FitnessProfileErrors>({})
@@ -49,7 +51,7 @@ export function useProfileForm({
 
   const submit = async (): Promise<boolean> => {
     if (inFlight.current) return false
-    const found = validateProfileForm(values)
+    const found = validateProfileForm(values, undefined, validation)
     if (Object.keys(found).length > 0) {
       setMessage(null)
       showFieldErrors(found)
@@ -60,7 +62,7 @@ export function useProfileForm({
     setMessage(null)
     setErrors({})
     try {
-      await save(toProfileInput(values))
+      await save(values)
       return true
     } catch (caught) {
       const mapped = toFitnessProfileFormError(caught)

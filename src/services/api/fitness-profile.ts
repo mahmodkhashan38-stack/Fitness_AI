@@ -21,10 +21,13 @@ const isNumber = (value: unknown): value is number => typeof value === 'number' 
 
 export function parseFitnessProfile(value: unknown): FitnessProfile {
   if (!isRecord(value)) throw new TypeError('Unexpected fitness profile payload')
-  const { sex, age, heightCm, weightKg, goal, trainingDaysPerWeek, onboardingCompletedAt, updatedAt } = value
+  const { sex, birthYear, age, heightCm, weightKg, goal, trainingDaysPerWeek, onboardingCompletedAt, updatedAt } = value
   if (
     !SEXES.includes(sex as Sex) ||
     !GOALS.includes(goal as FitnessGoal) ||
+    // null: a profile saved before FIT-14 that has no birth year yet. Absent: an API from before
+    // FIT-14 (only while a deployment is in progress), which is treated the same way.
+    !(birthYear === null || birthYear === undefined || isNumber(birthYear)) ||
     !isNumber(age) ||
     !isNumber(heightCm) ||
     !isNumber(weightKg) ||
@@ -37,6 +40,7 @@ export function parseFitnessProfile(value: unknown): FitnessProfile {
   }
   return {
     sex: sex as Sex,
+    birthYear: birthYear ?? null,
     age,
     heightCm,
     weightKg,
