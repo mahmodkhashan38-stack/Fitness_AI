@@ -86,34 +86,48 @@ export function BodyMetricsFields({ values, errors, onChange, fieldRef, disabled
   )
 }
 
-/** Main goal and weekly training frequency. */
-export function GoalFields({ values, errors, onChange, fieldRef, disabled }: FitnessProfileFieldsProps) {
+/** Main goal. */
+export function GoalField({ values, errors, onChange, fieldRef, disabled }: FitnessProfileFieldsProps) {
+  return (
+    <RadioCardGroup
+      ref={fieldRef?.('goal')}
+      legend="Main goal"
+      name="goal"
+      options={GOAL_OPTIONS}
+      value={values.goal}
+      onChange={(value) => onChange('goal', value as FitnessProfileFormValues['goal'])}
+      required
+      disabled={disabled}
+      error={errors.goal}
+    />
+  )
+}
+
+/** Weekly training frequency, 0–7 days. */
+export function TrainingDaysField({ values, errors, onChange, fieldRef, disabled }: FitnessProfileFieldsProps) {
+  return (
+    <RadioCardGroup
+      ref={fieldRef?.('trainingDaysPerWeek')}
+      legend="Training days per week"
+      name="trainingDaysPerWeek"
+      options={TRAINING_DAY_OPTIONS}
+      value={values.trainingDaysPerWeek}
+      onChange={(value) => onChange('trainingDaysPerWeek', value)}
+      compact
+      required
+      disabled={disabled}
+      helperText="How many days a week you usually work out. 0 is fine if you’re just starting."
+      error={errors.trainingDaysPerWeek}
+    />
+  )
+}
+
+/** Main goal and weekly training frequency (registration and onboarding). */
+export function GoalFields(props: FitnessProfileFieldsProps) {
   return (
     <div className="flex flex-col gap-6">
-      <RadioCardGroup
-        ref={fieldRef?.('goal')}
-        legend="Main goal"
-        name="goal"
-        options={GOAL_OPTIONS}
-        value={values.goal}
-        onChange={(value) => onChange('goal', value as FitnessProfileFormValues['goal'])}
-        required
-        disabled={disabled}
-        error={errors.goal}
-      />
-      <RadioCardGroup
-        ref={fieldRef?.('trainingDaysPerWeek')}
-        legend="Training days per week"
-        name="trainingDaysPerWeek"
-        options={TRAINING_DAY_OPTIONS}
-        value={values.trainingDaysPerWeek}
-        onChange={(value) => onChange('trainingDaysPerWeek', value)}
-        compact
-        required
-        disabled={disabled}
-        helperText="How many days a week you usually work out. 0 is fine if you’re just starting."
-        error={errors.trainingDaysPerWeek}
-      />
+      <GoalField {...props} />
+      <TrainingDaysField {...props} />
     </div>
   )
 }

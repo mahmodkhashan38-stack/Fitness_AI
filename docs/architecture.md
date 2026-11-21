@@ -633,7 +633,7 @@ Contracts, validation rules and test results: [fit-12-registration-onboarding-qa
 | `components/ui/RadioCardGroup.tsx` | components | Accessible single choice as cards (native radios) |
 | `components/fitness/FitnessProfileFields.tsx` | components | Body and goal field groups shared by registration, onboarding and the profile page |
 | `features/auth/RegisterForm.tsx` | features | Four-step registration (values kept across steps; errors jump to their step) |
-| `features/account/*` | features | Onboarding form and the profile page editor |
+| `features/account/*` | features | Onboarding form; Profile page (FIT-13): header with hero, silhouette avatar and statistics, five section cards with in-card editing |
 | `app/auth/AuthGate.tsx` | app | `RequireOnboarding` (app shell) and `OnboardingOnly` (`/onboarding`); `/onboarding` is never a redirect target, so no loops |
 
 Future modules read the profile through `getFitnessProfile(userId)` (or the API) with the session's user id;

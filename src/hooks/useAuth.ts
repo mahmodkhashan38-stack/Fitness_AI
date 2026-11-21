@@ -17,6 +17,8 @@ export interface AuthContextValue {
    * Throws ApiError otherwise (map with toFitnessProfileFormError).
    */
   completeOnboarding: (profile: FitnessProfileInput) => Promise<void>
+  /** Changes the display name and updates the signed-in user everywhere. Throws ApiError (map with toAuthFormError). */
+  updateName: (name: string) => Promise<AuthUser>
   /** Ends the server-side session. Throws ApiError if the server can't be reached. */
   logout: () => Promise<void>
   /** Checks the session again now (e.g. a Retry button). */

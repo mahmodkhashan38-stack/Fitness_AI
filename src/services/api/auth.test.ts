@@ -7,6 +7,7 @@ import {
   parseAuthUser,
   register,
   toAuthFormError,
+  updateName,
 } from '@/services/api/auth'
 import { ApiError } from '@/services/api/errors'
 import { TEST_PROFILE_INPUT } from '@/test/fitness-profile'
@@ -116,5 +117,22 @@ describe('toAuthFormError', () => {
     expect(toAuthFormError(new ApiError({ kind: 'timeout', message: 'x' }))!.message).toMatch(/taking too long/)
     expect(toAuthFormError(new ApiError({ kind: 'aborted', message: 'x' }))).toBeNull()
     expect(toAuthFormError(new Error('boom'))!.message).toBe('Something went wrong. Please try again.')
+  })
+})
+
+describe('updateName', () => {
+  it('PATCHes /users/me with only the name and returns the updated user', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    const fetchMock = vi.fn(async () => Response.json({ user: { ...user, name: 'Alex Rivera' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const updated = await updateName('Alex Rivera')
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/api/users/me', 'PATCH', { name: 'Alex Rivera' }])
+      expect(updated.name).toBe('Alex Rivera')
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+    }
   })
 })

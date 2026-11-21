@@ -55,6 +55,11 @@ export function register(data: RegistrationData, client: ApiClient = apiClient):
 }
 
 /** Ends the session on the server (and clears the cookie). */
+/** Changes the signed-in user's display name (PATCH /api/users/me; the API always uses the session's user). */
+export function updateName(name: string, client: ApiClient = apiClient): Promise<AuthUser> {
+  return client.patch('/users/me', { body: { name }, parse: parseUserResponse, timeoutMs: AUTH_REQUEST_TIMEOUT_MS })
+}
+
 export async function logout(client: ApiClient = apiClient): Promise<void> {
   await client.post('/auth/logout', { timeoutMs: AUTH_REQUEST_TIMEOUT_MS })
 }

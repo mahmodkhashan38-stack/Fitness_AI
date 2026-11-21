@@ -1,3 +1,4 @@
+import { UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/utils/cn'
 
@@ -15,6 +16,11 @@ export interface AvatarProps {
   name: string
   src?: string
   size?: AvatarSize
+  /**
+   * What to show without a photo: the person's initials (default) or a neutral user silhouette
+   * (the default profile picture; never derived from the person's data).
+   */
+  fallback?: 'initials' | 'silhouette'
   className?: string
 }
 
@@ -25,8 +31,8 @@ function getInitials(name: string): string {
   return (first + last).toUpperCase() || '?'
 }
 
-/** Shows a photo, falling back to initials when there is no image or it fails to load. */
-function Avatar({ name, src, size = 'md', className }: AvatarProps) {
+/** Shows a photo, falling back to initials or a silhouette when there is no image or it fails to load. */
+function Avatar({ name, src, size = 'md', fallback = 'initials', className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const showImage = Boolean(src) && failedSrc !== src
 
@@ -47,8 +53,12 @@ function Avatar({ name, src, size = 'md', className }: AvatarProps) {
           onError={() => setFailedSrc(src ?? null)}
         />
       ) : (
-        <span role="img" aria-label={name}>
-          <span aria-hidden="true">{getInitials(name)}</span>
+        <span role="img" aria-label={name} className="flex size-full items-center justify-center">
+          {fallback === 'silhouette' ? (
+            <UserRound aria-hidden="true" className="size-[55%]" strokeWidth={1.75} />
+          ) : (
+            <span aria-hidden="true">{getInitials(name)}</span>
+          )}
         </span>
       )}
     </span>

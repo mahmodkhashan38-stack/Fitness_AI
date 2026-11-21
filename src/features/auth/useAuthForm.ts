@@ -127,4 +127,4 @@ export function useAuthForm<T, F extends string = AuthField>({
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 12
 export const PASSWORD_MAX_LENGTH = 128
-export const NAME_MAX_LENGTH = 60
+export { NAME_MAX_LENGTH } from '@/utils/account'

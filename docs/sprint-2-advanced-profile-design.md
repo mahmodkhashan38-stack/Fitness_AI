@@ -1,11 +1,11 @@
 # Sprint 2 — Advanced Profile: design requirements
 
-Status: **requirements only, nothing implemented.** Sprint 2 builds on FIT-11 (authentication) and FIT-12
+Status: **FIT-13 implemented** (see "FIT-13 implementation notes" below); FIT-14 to FIT-17 not started. Sprint 2 builds on FIT-11 (authentication) and FIT-12
 (mandatory fitness profile). Every ticket must keep FIT-11 and FIT-12 behaviour, data and tests intact.
 
 | Ticket | Title | Status |
 |---|---|---|
-| FIT-13 | Advanced Profile page (hero, avatar, summary, statistics, section cards) | Specified (this document) |
+| FIT-13 | Advanced Profile page (hero, avatar, summary, statistics, section cards) | Implemented (placeholder hero until the licensed image arrives) |
 | FIT-14 | Personal and Body Information Management | Outline, to be detailed |
 | FIT-15 | Fitness Goals and Training Preferences | Outline, to be detailed |
 | FIT-16 | Body Weight History and Account Security | Outline, to be detailed |
@@ -131,6 +131,26 @@ so the user never loses their place. Only one card is in edit mode at a time.
 7. All FIT-11 and FIT-12 tests pass, plus new tests for the hero, avatar fallback, statistics, cards and states;
    production build and PWA verification pass.
 
+### 10. FIT-13 implementation notes
+
+- **Modules:** `features/account/ProfileView.tsx` (page, states, cards), `ProfileHeader.tsx` (hero, avatar,
+  identity, statistics), `ProfileSectionCard.tsx` (card + disclosure), `ProfileSectionForms.tsx` (name and
+  fitness card forms); `components/ui/Avatar.tsx` (`fallback="silhouette"`); `components/fitness/FitnessProfileFields.tsx`
+  (`GoalField` and `TrainingDaysField` split out; `GoalFields` unchanged for registration and onboarding);
+  `utils/account.ts` (name rules shared with registration); `services/api/auth.ts` `updateName` and
+  `AuthProvider.updateName` (the account menu updates too). The FIT-12 `FitnessProfileSection` was replaced by the
+  Body, Fitness Goals and Training Preferences cards.
+- **Hero:** `ProfileHero` takes an optional `imageSrc`; it is not set yet, so the theme placeholder shows. When
+  the licensed file arrives: add it as `src/assets/images/profile-hero.jpg`, import it, pass it as `imageSrc`, tune
+  `object-position`, and decide the precache question (section 1).
+- **Deviations from the text above:**
+  - Account Settings contains the existing theme control directly, because the Settings page doesn't have one
+    yet.
+  - Each Edit button is labelled "Edit <section>" / "Close <section>" with `aria-expanded` and `aria-controls`.
+  - Cards other than the one being edited are locked, so unsaved changes are never lost by switching cards.
+- **Layout reference:** the Profile UI reference image had not been received when FIT-13 was built; the layout
+  follows section 6 and should be compared with the reference when it arrives.
+
 ---
 
 ## FIT-14 — Personal and Body Information Management (outline)
@@ -182,7 +202,7 @@ Goal: track real weight changes over time and give users control over account ac
 
 | Item | Owner | Status |
 |---|---|---|
-| Profile UI design reference image | Product owner | Not received yet; layout in section 6 follows the written requirements until it arrives |
+| Profile UI design reference image | Product owner | Not received yet; FIT-13 follows section 6 and needs a visual comparison once it arrives |
 | Full-resolution licensed hero image | Product owner | Pending; placeholder until then |
 | Hero image licence and attribution terms | Product owner | To confirm before release |
 | Detailed requirements for FIT-14 to FIT-17 | Product owner | Outlines above, to be confirmed |

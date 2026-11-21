@@ -189,4 +189,28 @@ describe('AuthProvider', () => {
     })
     expect(latest.current!.user!.onboardingCompleted).toBe(false)
   })
+
+  it('updateName replaces the signed-in user, so every view shows the new name', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ user }))
+    renderProvider()
+    await settle()
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { ...user, name: 'Alex Rivera' } }))
+    await act(async () => {
+      await auth.updateName('Alex Rivera')
+    })
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect([url, init.method]).toEqual(['/api/users/me', 'PATCH'])
+    expect(latest.current!.user!.name).toBe('Alex Rivera')
+  })
+
+  it('updateName failures are thrown and leave the user unchanged', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ user }))
+    renderProvider()
+    await settle()
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'VALIDATION_FAILED', fields: { name: 'x' } } }, { status: 400 }))
+    await act(async () => {
+      await expect(auth.updateName('')).rejects.toMatchObject({ kind: 'http', status: 400 })
+    })
+    expect(latest.current!.user!.name).toBe('Alex')
+  })
 })

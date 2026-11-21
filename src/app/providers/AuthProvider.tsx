@@ -113,6 +113,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  const updateName = useCallback<AuthContextValue['updateName']>(async (name) => {
+    const user = await authApi.updateName(name)
+    setState((current) => (current.status === 'authenticated' ? { status: 'authenticated', user } : current))
+    return user
+  }, [])
+
   const logout = useCallback<AuthContextValue['logout']>(async () => {
     await authApi.logout()
     setState({ status: 'unauthenticated', user: null })
@@ -126,10 +132,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       completeOnboarding,
+      updateName,
       logout,
       refresh,
     }),
-    [state, slow, login, register, completeOnboarding, logout, refresh],
+    [state, slow, login, register, completeOnboarding, updateName, logout, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -10,6 +10,7 @@ import { EMAIL_PATTERN, NAME_MAX_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGT
 import { useAuth } from '@/hooks/useAuth'
 import type { AuthField, AuthFormError, RegistrationField } from '@/types/auth'
 import type { FitnessProfileErrors, FitnessProfileField, FitnessProfileFormValues } from '@/types/fitness-profile'
+import { validateDisplayName } from '@/utils/account'
 import { describeProfile, EMPTY_PROFILE_FORM, toProfileInput, validateProfileForm } from '@/utils/fitness-profile'
 
 type Errors = AuthFormError<RegistrationField>['fields']
@@ -60,9 +61,8 @@ function RegisterForm() {
 
   const validateAccount = (): Partial<Record<AuthField, string>> => {
     const fields: Partial<Record<AuthField, string>> = {}
-    const trimmedName = name.trim()
-    if (!trimmedName) fields.name = 'Enter your name.'
-    else if (trimmedName.length > NAME_MAX_LENGTH) fields.name = `Use at most ${NAME_MAX_LENGTH} characters.`
+    const nameError = validateDisplayName(name)
+    if (nameError) fields.name = nameError
     if (!email.trim()) fields.email = 'Enter your email address.'
     else if (!EMAIL_PATTERN.test(email.trim())) fields.email = 'Enter a valid email address.'
     // Same rule as the server, which counts characters after NFKC normalisation.
