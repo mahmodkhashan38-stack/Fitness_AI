@@ -8,6 +8,7 @@ import type {
   HttpMethod,
   QueryParams,
 } from '@/services/api/types'
+import { parseRetryAfter } from '@/utils/retry-after'
 
 export const DEFAULT_TIMEOUT_MS = 15_000
 
@@ -168,6 +169,7 @@ export function createApiClient(clientOptions: ApiClientOptions): ApiClient {
           path,
           status: response.status,
           body: parseErrorBody(text, contentType),
+          retryAfterSeconds: parseRetryAfter(response.headers.get('Retry-After')),
           message: `${describe(method, path)} failed with HTTP ${response.status}${statusText}.`,
         })
       }

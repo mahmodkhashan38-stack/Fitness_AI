@@ -68,6 +68,27 @@ describe('RequireAuth', () => {
     expect(auth.refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('when rate limited: explains it, shows no account data, and offers Try again only after Retry-After', async () => {
+    vi.useFakeTimers()
+    try {
+      const auth = createAuthValue({ status: 'unavailable', unavailable: { reason: 'rate-limited', notBefore: Date.now() + 30_000 } })
+      const router = renderAt('/workouts', auth)
+      expect(screen.getByRole('heading', { level: 1, name: 'Fitness AI is busy' })).toBeTruthy()
+      expect(screen.getByText(/You haven’t been logged out/)).toBeTruthy()
+      expect(screen.queryByRole('heading', { name: 'Workouts' })).toBeNull()
+      expect(screen.queryByText(TEST_USER.email)).toBeNull()
+      expect(screen.queryByText(TEST_USER.name)).toBeNull()
+      expect(router.state.location.pathname).toBe('/workouts')
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+
+      await act(async () => vi.advanceTimersByTimeAsync(30_100))
+      act(() => screen.getByRole('button', { name: 'Try again' }).click())
+      expect(auth.refresh).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('says so when the device is offline (installed PWA opened without a connection)', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
     renderAt('/workouts', createAuthValue({ status: 'unavailable' }))

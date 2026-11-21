@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation, useSearchParams } from 'react-router'
 import ErrorFallback from '@/components/feedback/ErrorFallback'
 import LoadingState from '@/components/feedback/LoadingState'
@@ -17,22 +18,47 @@ function SessionCheck() {
   )
 }
 
-/** Shown instead of protected pages while the session can't be verified. Retries automatically. */
+/** True once `at` (epoch ms) has passed; re-renders at that moment. */
+function useTimeReached(at: number | undefined): boolean {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (at === undefined || at <= Date.now()) return
+    const timer = window.setTimeout(() => setNow(Date.now()), at - Date.now() + 50)
+    return () => window.clearTimeout(timer)
+  }, [at])
+  return at === undefined || now >= at
+}
+
+/**
+ * Shown instead of protected pages while the session can't be verified (status
+ * `unavailable`). It shows no account data: a failed check never grants access. The user is
+ * not logged out either; checks continue automatically. "Try again" is offered only once the
+ * server's requested wait (Retry-After) has passed.
+ */
 function SessionUnavailable() {
-  const { refresh, slow } = useAuth()
+  const { refresh, slow, unavailable } = useAuth()
   const online = useOnlineStatus()
+  const canRetry = useTimeReached(unavailable?.notBefore ?? undefined)
+  const rateLimited = unavailable?.reason === 'rate-limited'
+
+  let title = 'Can’t reach Fitness AI'
+  let description = 'The server may be starting up, which can take up to a minute. We’ll keep trying automatically.'
+  if (!online) {
+    title = 'You’re offline'
+    description = 'Fitness AI needs a connection to check your account. We’ll reconnect automatically when you’re back online.'
+  } else if (rateLimited) {
+    title = 'Fitness AI is busy'
+    description = 'Too many requests reached Fitness AI, so we couldn’t confirm your session yet. You haven’t been logged out; we’ll try again automatically.'
+  }
+
   return (
     <main id="main-content" className="mx-auto w-full max-w-page px-4 sm:px-6">
       <ErrorFallback
         variant="page"
-        title={online ? 'Can’t reach Fitness AI' : 'You’re offline'}
-        description={
-          online
-            ? 'The server may be starting up, which can take up to a minute. We’ll keep trying automatically.'
-            : 'Fitness AI needs a connection to check your account. We’ll reconnect automatically when you’re back online.'
-        }
+        title={title}
+        description={canRetry ? description : `${description} Next check in a moment.`}
         retryLabel={slow ? 'Retrying…' : 'Try again'}
-        onRetry={refresh}
+        onRetry={canRetry ? refresh : undefined}
         focusOnMount
         headingLevel="h1"
       />

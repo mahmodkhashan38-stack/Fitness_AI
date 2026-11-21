@@ -21,6 +21,7 @@ export function createAuthValue(overrides: Partial<AuthContextValue> = {}): Auth
     login: vi.fn(async () => TEST_USER),
     register: vi.fn(async () => TEST_USER),
     completeOnboarding: vi.fn(async () => {}),
+    unavailable: null,
     logout: vi.fn(async () => {}),
     refresh: vi.fn(),
     ...overrides,

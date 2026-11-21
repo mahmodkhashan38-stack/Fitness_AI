@@ -413,3 +413,19 @@ describe('feature service pattern (example, test-only)', () => {
     expect(calls[0]!.url).toBe(`${BASE}/workouts?from=2026-11-01`)
   })
 })
+
+describe('Retry-After on HTTP errors', () => {
+  it.each([
+    ['30', 30],
+    [null, undefined],
+    ['soon', undefined],
+  ])('records Retry-After %j as %j seconds', async (value, seconds) => {
+    const { fetch } = mockFetch(() => json({ error: { code: 'RATE_LIMITED' } }, { status: 429, headers: value ? { 'Retry-After': value } : {} }))
+    const error = await createApiClient({ baseUrl: BASE, fetch })
+      .get('/auth/me')
+      .catch((caught: unknown) => caught)
+    expect(isApiError(error) && error.kind).toBe('http')
+    expect((error as ApiError).retryAfterSeconds).toBe(seconds)
+    expect((error as ApiError).message).not.toContain('Retry')
+  })
+})

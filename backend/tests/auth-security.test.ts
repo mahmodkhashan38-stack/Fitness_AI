@@ -312,3 +312,39 @@ describe('logging', () => {
     expect(all).not.toMatch(/cookie|fa_session/i)
   })
 })
+
+describe('rate-limit scopes for the session check (FIT-11 hotfix)', () => {
+  it('/auth/me requests never use up the failed-login limits', async () => {
+    const { url } = await app({ authRateLimits: { ...noAuthLimits, loginPerIp: { windowMs: 60_000, limit: 2 }, loginPerEmail: { windowMs: 60_000, limit: 2 } } })
+    await createClient(url).post('/api/auth/register', validRegistration())
+    const client = createClient(url)
+    for (let i = 0; i < 20; i++) expect((await client.get('/api/auth/me')).status).toBe(401)
+    // Logging in still works: the session checks above didn't count as failed logins.
+    expect((await client.post('/api/auth/login', { email: 'alex@example.com', password: 'correct horse battery staple' })).status).toBe(200)
+  })
+
+  it('failed logins never block the session check (only the general per-IP limit applies to it)', async () => {
+    const { url } = await app({ authRateLimits: { ...noAuthLimits, loginPerIp: { windowMs: 60_000, limit: 2 } } })
+    await createClient(url).post('/api/auth/register', validRegistration())
+    const signedIn = createClient(url)
+    expect((await signedIn.post('/api/auth/login', { email: 'alex@example.com', password: 'correct horse battery staple' })).status).toBe(200)
+    for (let i = 0; i < 3; i++) await signedIn.post('/api/auth/login', { email: 'alex@example.com', password: 'wrong password here' })
+    expect((await signedIn.post('/api/auth/login', { email: 'alex@example.com', password: 'wrong password here' })).status).toBe(429)
+    expect((await signedIn.get('/api/auth/me')).status).toBe(200)
+  })
+
+  it('the general limit is shared by /auth/me and /auth/login and answers with JSON 429, Retry-After and RateLimit headers', async () => {
+    const { url } = await app({ rateLimit: { windowMs: 60_000, limit: 3 } })
+    const client = createClient(url)
+    expect((await client.get('/api/auth/me')).status).toBe(401)
+    expect((await client.get('/api/auth/me')).status).toBe(401)
+    expect((await client.post('/api/auth/login', { email: 'nobody@example.com', password: 'wrong password here' })).status).toBe(401)
+    const blocked = await client.get<ErrorBody>('/api/auth/me')
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers.get('content-type')).toMatch(/^application\/json/)
+    expect(blocked.body.error.code).toBe('RATE_LIMITED')
+    expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(blocked.headers.get('ratelimit')).toMatch(/r=0/)
+    expect(blocked.headers.get('ratelimit-policy')).toMatch(/q=3/)
+  })
+})

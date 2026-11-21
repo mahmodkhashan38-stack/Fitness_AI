@@ -43,6 +43,23 @@ function errorResponse(status: number, code: string, message: string, retryAfter
   return new Response(JSON.stringify({ error: { code, message } }), { status, headers })
 }
 
+/** Bounds for the Retry-After sent with UPSTREAM_UNAVAILABLE (seconds). */
+export const UPSTREAM_RETRY_AFTER = { default: 30, min: 1, max: 300 } as const
+
+function isJsonResponse(response: Response): boolean {
+  const type = response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase()
+  return type === 'application/json' || (type?.endsWith('+json') ?? false)
+}
+
+/** The upstream Retry-After in whole seconds (delta-seconds only), bounded; a default otherwise. */
+function upstreamRetryAfter(response: Response): number {
+  const value = response.headers.get('Retry-After')?.trim()
+  if (value && /^\d{1,6}$/.test(value)) {
+    return Math.min(UPSTREAM_RETRY_AFTER.max, Math.max(UPSTREAM_RETRY_AFTER.min, Number(value)))
+  }
+  return UPSTREAM_RETRY_AFTER.default
+}
+
 function isApiPath(pathname: string): boolean {
   return pathname === '/api' || pathname.startsWith('/api/')
 }
@@ -100,7 +117,31 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
     return errorResponse(502, 'UPSTREAM_UNAVAILABLE', 'Fitness AI is starting up. Please try again in a moment.', 5)
   }
 
-  // Pass status, headers (including Set-Cookie) and body through unchanged.
+  // The API always answers with JSON. A non-JSON error comes from something in front of it, e.g. a
+  // Cloudflare bot challenge or block page on the Render hostname (HTTP 403/429), or Render's own
+  // "waking up" / bad gateway pages. A server-side proxy can't pass a challenge, and the app can't
+  // use the HTML, so answer with the app's structured "temporarily unavailable" error instead.
+  // Its cookies (e.g. __cf_bm for onrender.com) are dropped rather than set on the app's origin.
+  if (!upstream.ok && !isJsonResponse(upstream)) {
+    await upstream.body?.cancel()
+    console.warn(
+      JSON.stringify({
+        event: 'upstream_non_api_error',
+        status: upstream.status,
+        cfRay: upstream.headers.get('cf-ray'),
+        path: url.pathname,
+      }),
+    )
+    return errorResponse(
+      503,
+      'UPSTREAM_UNAVAILABLE',
+      'Fitness AI is temporarily unavailable. Please try again in a moment.',
+      upstreamRetryAfter(upstream),
+    )
+  }
+
+  // API responses (including its JSON 429 with RateLimit and Retry-After headers): status,
+  // headers (including Set-Cookie) and body pass through unchanged.
   const response = new Response(upstream.body, upstream)
   if (!response.headers.has('Cache-Control')) response.headers.set('Cache-Control', 'no-store')
   return response

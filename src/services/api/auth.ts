@@ -1,3 +1,4 @@
+import { MAX_RETRY_DELAY_MS, RETRY_DELAYS_MS } from '@/constants/auth'
 import { apiClient } from '@/services/api/client'
 import { isApiError } from '@/services/api/errors'
 import type { ApiClient } from '@/services/api/types'
@@ -63,7 +64,27 @@ export async function logout(client: ApiClient = apiClient): Promise<void> {
 export function isTemporaryAuthFailure(error: unknown): boolean {
   if (!isApiError(error)) return false
   if (error.kind === 'network' || error.kind === 'timeout') return true
-  return error.kind === 'http' && error.status !== undefined && error.status >= 500
+  // 429 (rate limited) and 5xx (incl. the Worker's 503 UPSTREAM_UNAVAILABLE) say nothing about the
+  // session: it can't be verified right now, so it is neither confirmed nor ended.
+  return error.kind === 'http' && error.status !== undefined && (error.status === 429 || error.status >= 500)
+}
+
+/**
+ * Delay before the next automatic session check: bounded exponential back-off
+ * (RETRY_DELAYS_MS), never sooner than the server's Retry-After, never longer than
+ * MAX_RETRY_DELAY_MS.
+ */
+export function sessionRetryDelayMs(attempt: number, retryAfterSeconds?: number): number {
+  const backoff = RETRY_DELAYS_MS[Math.min(Math.max(attempt, 0), RETRY_DELAYS_MS.length - 1)] ?? MAX_RETRY_DELAY_MS
+  const requested = retryAfterSeconds !== undefined ? retryAfterSeconds * 1000 : 0
+  return Math.min(MAX_RETRY_DELAY_MS, Math.max(backoff, requested))
+}
+
+/** "about 2 minutes" / "about 40 seconds" for a wait in seconds. */
+function describeWait(seconds: number): string {
+  if (seconds >= 90) return `about ${Math.round(seconds / 60)} minutes`
+  if (seconds > 60) return 'about a minute'
+  return `about ${Math.max(seconds, 1)} seconds`
 }
 
 export const AUTH_FIELDS: readonly AuthField[] = ['email', 'password', 'name']
@@ -122,12 +143,25 @@ export function toAuthFormError<F extends string = AuthField>(
         message: null,
         fields: { email: 'An account with this email already exists. Log in instead.' } as AuthFormError<F>['fields'],
       }
-    case 'RATE_LIMITED':
-      return { message: 'Too many attempts. Please wait a few minutes and try again.', fields: {} }
+    case 'RATE_LIMITED': {
+      const wait = error.retryAfterSeconds
+      return {
+        message:
+          wait !== undefined && wait > 0
+            ? `Too many attempts. Please try again in ${describeWait(wait)}.`
+            : 'Too many attempts. Please wait a few minutes and try again.',
+        fields: {},
+      }
+    }
+    case 'UPSTREAM_UNAVAILABLE':
+      return { message: 'Fitness AI is temporarily unavailable. Please try again in a moment.', fields: {} }
     case 'UNAUTHENTICATED':
       return { message: 'Your session has ended. Please log in again.', fields: {} }
     case 'CSRF_REJECTED':
       return { message: 'Your request was blocked for security reasons. Reload the page and try again.', fields: {} }
+  }
+  if (error.status === 429) {
+    return { message: 'Fitness AI is receiving too many requests right now. Please wait a moment and try again.', fields: {} }
   }
   if (error.status !== undefined && error.status >= 500) {
     return { message: 'Fitness AI is starting up or temporarily unavailable. Please try again in a moment.', fields: {} }
