@@ -1,7 +1,8 @@
 import type { Types } from 'mongoose'
-import type { FitnessProfileInput } from '../fitness/validation.js'
+import type { FitnessProfileInput, FitnessProfileUpdate } from '../fitness/validation.js'
 import { FitnessProfileModel, toPublicFitnessProfile, type PublicFitnessProfile } from '../models/fitness-profile.js'
 import { HttpError } from '../utils/http-error.js'
+import { validationError } from '../utils/validation.js'
 import { isDuplicateKeyError } from '../utils/mongo-errors.js'
 
 /**
@@ -35,13 +36,32 @@ export async function completeOnboarding(userId: Types.ObjectId, input: FitnessP
   }
 }
 
-/** Updates only the validated, allowed fields ($set of a whitelist); userId and timestamps can't be changed. */
-export async function updateFitnessProfile(userId: Types.ObjectId, update: Partial<FitnessProfileInput>): Promise<PublicFitnessProfile> {
+/**
+ * An age sent by a pre-FIT-14 client for a profile whose birth year is already stored. Reported on
+ * the `age` field, which those clients show next to their Age input.
+ */
+export const BIRTH_YEAR_ALREADY_SAVED = () =>
+  validationError({ age: 'Your birth year is already saved, so your age updates automatically. Reload Fitness AI to see it.' })
+
+/**
+ * Updates only the validated, allowed fields ($set of a whitelist); userId and timestamps can't be
+ * changed. Storing a birth year removes the stored age (it would only go stale).
+ *
+ * An `age` (sent only by pre-FIT-14 clients) is accepted only while the profile has no birth year:
+ * a confirmed birth year is never overwritten or removed by it. The condition is part of the
+ * update's filter, so it also holds against a concurrent request that adds a birth year. When it
+ * doesn't match, nothing is written (not even the request's other fields).
+ */
+export async function updateFitnessProfile(userId: Types.ObjectId, update: FitnessProfileUpdate): Promise<PublicFitnessProfile> {
+  const legacyAge = update.age !== undefined
+  // `birthYear: null` matches documents where the field is absent.
+  const filter = legacyAge ? { userId, birthYear: null } : { userId }
   const profile = await FitnessProfileModel.findOneAndUpdate(
-    { userId },
-    { $set: update },
+    filter,
+    { $set: update, ...(update.birthYear !== undefined ? { $unset: { age: 1 } } : {}) },
     { returnDocument: 'after', runValidators: true },
   ).lean()
-  if (!profile) throw ONBOARDING_REQUIRED()
-  return toPublicFitnessProfile(profile)
+  if (profile) return toPublicFitnessProfile(profile)
+  if (legacyAge && (await hasFitnessProfile(userId))) throw BIRTH_YEAR_ALREADY_SAVED()
+  throw ONBOARDING_REQUIRED()
 }

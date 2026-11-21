@@ -61,9 +61,12 @@ export function createClient(baseUrl: string, options: { origin?: string | null;
 export type TestClient = ReturnType<typeof createClient>
 
 /** A complete, valid fitness profile (FIT-12). */
+/** Birth year of someone turning `age` this calendar year (UTC, like the API). */
+export const birthYearFor = (age: number) => new Date().getUTCFullYear() - age
+
 export const validProfile = (overrides: Record<string, unknown> = {}) => ({
   sex: 'female',
-  age: 29,
+  birthYear: birthYearFor(29),
   heightCm: 168,
   weightKg: 61.5,
   goal: 'muscle_gain',

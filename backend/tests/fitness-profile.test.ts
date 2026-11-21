@@ -6,7 +6,7 @@ import { FitnessProfileModel } from '../src/models/fitness-profile.js'
 import { SessionModel } from '../src/models/session.js'
 import { UserModel } from '../src/models/user.js'
 import type { Logger } from '../src/utils/logger.js'
-import { createClient, validProfile, validRegistration, type TestClient } from './support/client.js'
+import { birthYearFor, createClient, validProfile, validRegistration, type TestClient } from './support/client.js'
 import { startTestDatabase } from './support/mongo.js'
 import { startTestApp, type RunningServer } from './helpers.js'
 
@@ -44,6 +44,7 @@ afterEach(async () => {
 
 type Profile = {
   sex: string
+  birthYear: number | null
   age: number
   heightCm: number
   weightKg: number
@@ -107,6 +108,7 @@ describe('registration with mandatory onboarding', () => {
     expect(response.body).toEqual({
       profile: {
         ...validProfile(),
+        age: 29,
         onboardingCompleted: true,
         onboardingCompletedAt: expect.any(String),
         updatedAt: expect.any(String),
@@ -121,7 +123,7 @@ describe('registration with mandatory onboarding', () => {
     delete withoutProfile.profile
     const response = await client.post<ErrorBody>('/api/auth/register', withoutProfile)
     expect(response.status).toBe(400)
-    expect(Object.keys(response.body.error.fields ?? {}).sort()).toEqual(['age', 'goal', 'heightCm', 'sex', 'trainingDaysPerWeek', 'weightKg'])
+    expect(Object.keys(response.body.error.fields ?? {}).sort()).toEqual(['birthYear', 'goal', 'heightCm', 'sex', 'trainingDaysPerWeek', 'weightKg'])
     expect(response.setCookies).toEqual([])
     expect(await UserModel.countDocuments()).toBe(0)
     expect(await FitnessProfileModel.countDocuments()).toBe(0)
@@ -129,9 +131,9 @@ describe('registration with mandatory onboarding', () => {
 
   it.each([
     ['sex', 'other'],
-    ['age', 15],
-    ['age', 101],
-    ['age', '30'],
+    ['birthYear', birthYearFor(15)],
+    ['birthYear', birthYearFor(101)],
+    ['birthYear', '1990'],
     ['heightCm', 99],
     ['heightCm', 251],
     ['weightKg', 29],
@@ -154,9 +156,9 @@ describe('registration with mandatory onboarding', () => {
   it('reports account and profile problems together', async () => {
     const response = await createClient(running.url).post<ErrorBody>(
       '/api/auth/register',
-      validRegistration({ email: 'nope', profile: validProfile({ age: 3 }) }),
+      validRegistration({ email: 'nope', profile: validProfile({ birthYear: 3 }) }),
     )
-    expect(Object.keys(response.body.error.fields ?? {}).sort()).toEqual(['age', 'email'])
+    expect(Object.keys(response.body.error.fields ?? {}).sort()).toEqual(['birthYear', 'email'])
   })
 
   it('rejects a client-supplied userId inside the profile', async () => {
@@ -173,14 +175,14 @@ describe('registration with mandatory onboarding', () => {
     await registered()
     const response = await createClient(running.url).post<ErrorBody>(
       '/api/auth/register',
-      validRegistration({ email: 'ALEX@example.com', profile: validProfile({ sex: 'male', age: 50 }) }),
+      validRegistration({ email: 'ALEX@example.com', profile: validProfile({ sex: 'male', birthYear: birthYearFor(50) }) }),
     )
     expect(response.status).toBe(409)
     expect(response.body.error.code).toBe('EMAIL_TAKEN')
     expect(await UserModel.countDocuments()).toBe(1)
     const profiles = await FitnessProfileModel.find().lean()
     expect(profiles).toHaveLength(1)
-    expect(profiles[0]).toMatchObject({ sex: 'female', age: 29 })
+    expect(profiles[0]).toMatchObject({ sex: 'female', birthYear: birthYearFor(29) })
   })
 
   it('concurrent registrations with one email leave exactly one consistent account', async () => {
@@ -213,7 +215,7 @@ describe('registration failure and recovery (transaction)', () => {
     // The error is logged without the request's personal data.
     const log = logLines.join('\n')
     expect(log).toContain('simulated database failure')
-    for (const secret of ['alex@example.com', PASSWORD, '61.5', 'muscle_gain', '"age"']) expect(log).not.toContain(secret)
+    for (const secret of ['alex@example.com', PASSWORD, '61.5', 'muscle_gain', '"birthYear"', String(birthYearFor(29))]) expect(log).not.toContain(secret)
 
     const retried = await client.post<UserBody>('/api/auth/register', validRegistration())
     expect(retried.status).toBe(201)
@@ -300,9 +302,9 @@ describe('existing users without a profile (accounts created before FIT-12)', ()
   it('onboarding validates every field and writes nothing on error', async () => {
     await legacyUser()
     const { client } = await loggedIn('legacy@example.com')
-    const response = await client.post<ErrorBody>(PROFILE_PATH, { sex: 'female', age: 200 })
+    const response = await client.post<ErrorBody>(PROFILE_PATH, { sex: 'female', birthYear: 200 })
     expect(response.status).toBe(400)
-    expect(Object.keys(response.body.error.fields ?? {})).toEqual(['age', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek'])
+    expect(Object.keys(response.body.error.fields ?? {})).toEqual(['birthYear', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek'])
     expect(await FitnessProfileModel.countDocuments()).toBe(0)
   })
 })
@@ -328,7 +330,8 @@ describe('profile updates', () => {
 
   it.each([
     [{}, undefined],
-    [{ age: 12 }, 'age'],
+    [{ birthYear: birthYearFor(12) }, 'birthYear'],
+    [{ birthYear: 1990, age: 30 }, 'birthYear'],
     [{ sex: 'unknown' }, 'sex'],
     [{ heightCm: '180' }, 'heightCm'],
     [{ trainingDaysPerWeek: null }, 'trainingDaysPerWeek'],
@@ -344,9 +347,9 @@ describe('profile updates', () => {
     'rejects attempts to change protected fields %j',
     async (extra) => {
       const client = await registered()
-      const response = await client.patch<ErrorBody>(PROFILE_PATH, { age: 40, ...extra })
+      const response = await client.patch<ErrorBody>(PROFILE_PATH, { birthYear: 1980, ...extra })
       expect(response.status).toBe(400)
-      expect(await FitnessProfileModel.findOne().lean()).toMatchObject({ age: 29 })
+      expect(await FitnessProfileModel.findOne().lean()).toMatchObject({ birthYear: birthYearFor(29) })
     },
   )
 
@@ -379,19 +382,19 @@ describe('authentication and authorisation', () => {
 
   it('keeps CSRF protection: foreign or missing Origin and non-JSON bodies are refused', async () => {
     const client = await registered()
-    expect((await client.patch(PROFILE_PATH, { age: 40 }, { Origin: 'https://evil.example' })).status).toBe(403)
+    expect((await client.patch(PROFILE_PATH, { birthYear: 1980 }, { Origin: 'https://evil.example' })).status).toBe(403)
     const cookie = [...client.jar].map(([name, value]) => `${name}=${value}`).join('; ')
     const noOrigin = createClient(running.url, { origin: null })
-    expect((await noOrigin.request('PATCH', PROFILE_PATH, { json: { age: 40 }, headers: { Cookie: cookie } })).status).toBe(403)
-    expect((await client.request('PATCH', PROFILE_PATH, { rawBody: 'age=40', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })).status).toBe(415)
-    expect(await FitnessProfileModel.findOne().lean()).toMatchObject({ age: 29 })
+    expect((await noOrigin.request('PATCH', PROFILE_PATH, { json: { birthYear: 1980 }, headers: { Cookie: cookie } })).status).toBe(403)
+    expect((await client.request('PATCH', PROFILE_PATH, { rawBody: 'birthYear=1980', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })).status).toBe(415)
+    expect(await FitnessProfileModel.findOne().lean()).toMatchObject({ birthYear: birthYearFor(29) })
   })
 })
 
 describe('cross-user isolation', () => {
   it('each user only ever sees and changes their own profile', async () => {
-    const alex = await registered({ email: 'alex@example.com', profile: validProfile({ sex: 'female', age: 29 }) })
-    const sam = await registered({ email: 'sam@example.com', profile: validProfile({ sex: 'male', age: 41, goal: 'fat_loss' }) })
+    const alex = await registered({ email: 'alex@example.com', profile: validProfile({ sex: 'female', birthYear: birthYearFor(29) }) })
+    const sam = await registered({ email: 'sam@example.com', profile: validProfile({ sex: 'male', birthYear: birthYearFor(41), goal: 'fat_loss' }) })
     const samUser = await UserModel.findOne({ email: 'sam@example.com' }).lean()
     const samId = samUser!._id.toString()
 
@@ -400,12 +403,12 @@ describe('cross-user isolation', () => {
 
     // A user id in the query string, body or path is never used.
     expect((await alex.get<ProfileBody>(`${PROFILE_PATH}?userId=${samId}`)).body.profile).toMatchObject({ age: 29 })
-    expect((await alex.patch(PROFILE_PATH, { age: 30, userId: samId })).status).toBe(400)
+    expect((await alex.patch(PROFILE_PATH, { birthYear: birthYearFor(30), userId: samId })).status).toBe(400)
     expect((await alex.get(`/api/users/${samId}/fitness-profile`)).status).toBe(404)
-    expect((await alex.patch(`/api/users/${samId}/fitness-profile`, { age: 99 })).status).toBe(404)
+    expect((await alex.patch(`/api/users/${samId}/fitness-profile`, { birthYear: 1950 })).status).toBe(404)
 
-    expect((await alex.patch<ProfileBody>(PROFILE_PATH, { age: 30 })).body.profile.age).toBe(30)
-    expect(await FitnessProfileModel.findOne({ userId: samUser!._id }).lean()).toMatchObject({ age: 41, goal: 'fat_loss' })
+    expect((await alex.patch<ProfileBody>(PROFILE_PATH, { birthYear: birthYearFor(30) })).body.profile.age).toBe(30)
+    expect(await FitnessProfileModel.findOne({ userId: samUser!._id }).lean()).toMatchObject({ birthYear: birthYearFor(41), goal: 'fat_loss' })
   })
 
   it('onboarding never attaches a profile to another account', async () => {
@@ -431,5 +434,106 @@ describe('sessions (FIT-11 behaviour preserved)', () => {
     const client = await registered()
     const response = await client.patch<UserBody>('/api/users/me', { name: 'Alexandra' })
     expect(response.body.user).toMatchObject({ name: 'Alexandra', onboardingCompleted: true })
+  })
+})
+
+describe('birth year and profiles from before FIT-14', () => {
+  /** A user whose profile was stored before FIT-14: an age as entered, no birth year. */
+  async function preFit14Profile(age = 41) {
+    const client = await registered()
+    const user = await UserModel.findOne({ email: 'alex@example.com' }).lean()
+    await FitnessProfileModel.collection.updateOne({ userId: user!._id }, { $set: { age }, $unset: { birthYear: '' } })
+    return client
+  }
+
+  it('reports such a profile with its stored age and no birth year; nothing is estimated', async () => {
+    const client = await preFit14Profile(41)
+    const response = await client.get<ProfileBody>(PROFILE_PATH)
+    expect(response.status).toBe(200)
+    expect(response.body.profile).toMatchObject({ birthYear: null, age: 41 })
+    expect(await FitnessProfileModel.findOne().lean()).not.toHaveProperty('birthYear')
+  })
+
+  it('other edits keep the stored age until the user adds a birth year', async () => {
+    const client = await preFit14Profile(41)
+    const response = await client.patch<ProfileBody>(PROFILE_PATH, { weightKg: 70 })
+    expect(response.body.profile).toMatchObject({ birthYear: null, age: 41, weightKg: 70 })
+  })
+
+  it('adding a birth year stores it, removes the stale age and derives the age from now on', async () => {
+    const client = await preFit14Profile(41)
+    const response = await client.patch<ProfileBody>(PROFILE_PATH, { birthYear: birthYearFor(42) })
+    expect(response.status).toBe(200)
+    expect(response.body.profile).toMatchObject({ birthYear: birthYearFor(42), age: 42 })
+    const stored = await FitnessProfileModel.findOne().lean()
+    expect(stored).toMatchObject({ birthYear: birthYearFor(42) })
+    expect(stored).not.toHaveProperty('age')
+  })
+
+  it('keeps clients from before FIT-14 working: they can still register, onboard and edit with an age', async () => {
+    const withAge: Record<string, unknown> = { ...validProfile(), age: 33 }
+    delete withAge.birthYear
+    const client = createClient(running.url)
+    expect((await client.post('/api/auth/register', validRegistration({ profile: withAge }))).status).toBe(201)
+    const got = (await client.get<ProfileBody>(PROFILE_PATH)).body.profile
+    // An old client reads `age` and ignores `birthYear`.
+    expect(got).toMatchObject({ age: 33, birthYear: null })
+
+    await legacyUser()
+    const { client: onboarding } = await loggedIn('legacy@example.com')
+    expect((await onboarding.post<ProfileBody>(PROFILE_PATH, withAge)).body.profile).toMatchObject({ age: 33, birthYear: null })
+
+    // Editing the age of a profile that has no birth year yet still works for an old client.
+    expect((await client.patch<ProfileBody>(PROFILE_PATH, { age: 34 })).body.profile).toMatchObject({ age: 34, birthYear: null })
+  })
+
+  it('an old client can never overwrite or remove a confirmed birth year by sending an age', async () => {
+    const client = await registered()
+    const user = await UserModel.findOne({ email: 'alex@example.com' }).lean()
+    const before = await FitnessProfileModel.findOne({ userId: user!._id }).lean()
+
+    for (const body of [{ age: 35 }, { age: 35, weightKg: 99 }, { age: 16 }]) {
+      const response = await client.patch<ErrorBody>(PROFILE_PATH, body)
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('VALIDATION_FAILED')
+      // Reported on `age`, the field old clients show next to their Age input.
+      expect(Object.keys(response.body.error.fields ?? {})).toEqual(['age'])
+    }
+    // Nothing was written, not even the request's other fields.
+    const after = await FitnessProfileModel.findOne({ userId: user!._id }).lean()
+    expect(after).toEqual(before)
+    expect(after).toMatchObject({ birthYear: birthYearFor(29), weightKg: 61.5 })
+    expect(after).not.toHaveProperty('age')
+    expect((await client.get<ProfileBody>(PROFILE_PATH)).body.profile).toMatchObject({ birthYear: birthYearFor(29), age: 29 })
+  })
+
+  it('a confirmed birth year also survives an old client racing with the user adding it', async () => {
+    const client = await preFit14Profile(41)
+    const results = await Promise.all([
+      client.patch(PROFILE_PATH, { birthYear: birthYearFor(42) }),
+      ...Array.from({ length: 5 }, () => client.patch(PROFILE_PATH, { age: 50 })),
+    ])
+    expect(results[0]!.status).toBe(200)
+    // Whatever the order, the birth year is the final state and no stale age remains.
+    const stored = await FitnessProfileModel.findOne().lean()
+    expect(stored).toMatchObject({ birthYear: birthYearFor(42) })
+    expect(stored).not.toHaveProperty('age')
+    for (const result of results.slice(1)) expect([200, 400]).toContain(result.status)
+  })
+
+  it('refuses a birth year and an age together and changes nothing', async () => {
+    const client = await preFit14Profile(41)
+    const response = await client.patch<ErrorBody>(PROFILE_PATH, { birthYear: birthYearFor(42), age: 42 })
+    expect(response.status).toBe(400)
+    expect(response.body.error.fields).toEqual({ birthYear: 'Send a birth year or an age, not both.' })
+    expect(await FitnessProfileModel.findOne().lean()).toMatchObject({ age: 41 })
+  })
+
+  it('never writes the birth year to the logs', async () => {
+    const client = await registered({ email: 'sam@example.com', profile: validProfile({ birthYear: 1987 }) })
+    await client.patch(PROFILE_PATH, { birthYear: 1986 })
+    await client.patch(PROFILE_PATH, { birthYear: 1800 })
+    const log = logLines.join('\n')
+    for (const value of ['1987', '1986', '1800']) expect(log).not.toContain(value)
   })
 })

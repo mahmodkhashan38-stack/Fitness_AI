@@ -81,7 +81,7 @@ describe('registration', () => {
   })
 
   it.each([
-    [{}, ['email', 'password', 'name', 'sex', 'age', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek']],
+    [{}, ['email', 'password', 'name', 'sex', 'birthYear', 'heightCm', 'weightKg', 'goal', 'trainingDaysPerWeek']],
     [validRegistration({ email: 'not-an-email' }), ['email']],
     [validRegistration({ password: 'short' }), ['password']],
     [validRegistration({ password: 'x'.repeat(129) }), ['password']],
