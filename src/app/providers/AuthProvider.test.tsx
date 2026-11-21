@@ -213,4 +213,121 @@ describe('AuthProvider', () => {
     })
     expect(latest.current!.user!.name).toBe('Alex')
   })
+
+  describe('rate limited or upstream unavailable (FIT-11 hotfix)', () => {
+    const rateLimited = (retryAfter?: string, body: unknown = { error: { code: 'RATE_LIMITED', message: 'x' } }) =>
+      typeof body === 'string'
+        ? new Response(body, { status: 429, headers: { 'Content-Type': 'text/html', ...(retryAfter ? { 'Retry-After': retryAfter } : {}) } })
+        : Response.json(body, { status: 429, headers: retryAfter ? { 'Retry-After': retryAfter } : {} })
+    const upstreamUnavailable = () =>
+      Response.json({ error: { code: 'UPSTREAM_UNAVAILABLE', message: 'x' } }, { status: 503, headers: { 'Retry-After': '30' } })
+
+    it('a 429 on the session check is neither signed in nor signed out, and exposes no user', async () => {
+      fetchMock.mockResolvedValueOnce(rateLimited('60'))
+      renderProvider()
+      await settle()
+      expect(status()).toBe('unavailable:-:fast')
+      expect(latest.current!.user).toBeNull()
+      expect(latest.current!.unavailable).toEqual({ reason: 'rate-limited', notBefore: expect.any(Number) })
+    })
+
+    it('an HTML 429 (edge challenge passed through by an older Worker) is also only "unavailable"', async () => {
+      fetchMock.mockResolvedValueOnce(rateLimited(undefined, '<!DOCTYPE html><title>Just a moment...</title>'))
+      renderProvider()
+      await settle()
+      expect(status()).toBe('unavailable:-:fast')
+      expect(latest.current!.unavailable).toEqual({ reason: 'rate-limited', notBefore: null })
+    })
+
+    it('a signed-in user is not logged out by a 429 or 503 re-check, but the session is no longer exposed until verified', async () => {
+      vi.useFakeTimers()
+      fetchMock.mockResolvedValueOnce(ok())
+      renderProvider()
+      await settle()
+      expect(status()).toBe('authenticated:alex@example.com:fast')
+
+      fetchMock.mockResolvedValueOnce(upstreamUnavailable())
+      await act(async () => auth.refresh())
+      await settle()
+      expect(status()).toBe('unavailable:-:fast')
+      expect(latest.current!.user).toBeNull()
+      expect(latest.current!.unavailable).toEqual({ reason: 'unreachable', notBefore: expect.any(Number) })
+      // No logout request was made; the session cookie is untouched.
+      expect(fetchMock.mock.calls.every(([, init]) => (init as RequestInit | undefined)?.method !== 'POST')).toBe(true)
+
+      fetchMock.mockResolvedValueOnce(ok())
+      await act(async () => vi.advanceTimersByTimeAsync(30_000))
+      expect(status()).toBe('authenticated:alex@example.com:fast')
+    })
+
+    it('never re-checks before Retry-After, and not because the app regains focus or goes online', async () => {
+      vi.useFakeTimers()
+      fetchMock.mockResolvedValueOnce(rateLimited('60')).mockImplementation(async () => ok())
+      renderProvider()
+      await settle()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'))
+        document.dispatchEvent(new Event('visibilitychange'))
+        await vi.advanceTimersByTimeAsync(59_000)
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(status()).toBe('unavailable:-:fast')
+
+      await act(async () => vi.advanceTimersByTimeAsync(1_000))
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(status()).toBe('authenticated:alex@example.com:fast')
+    })
+
+    it('bounds the wait: an enormous Retry-After is capped at five minutes', async () => {
+      vi.useFakeTimers()
+      fetchMock.mockResolvedValueOnce(rateLimited('86400')).mockImplementation(async () => ok())
+      renderProvider()
+      await settle()
+      await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000 - 1))
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      await act(async () => vi.advanceTimersByTimeAsync(1))
+      expect(status()).toBe('authenticated:alex@example.com:fast')
+    })
+
+    it('backs off exponentially while the limit persists', async () => {
+      vi.useFakeTimers()
+      fetchMock.mockImplementation(async () => rateLimited())
+      renderProvider()
+      await settle()
+      const callsAfter = async (ms: number) => {
+        await act(async () => vi.advanceTimersByTimeAsync(ms))
+        return fetchMock.mock.calls.length
+      }
+      expect(await callsAfter(2_000)).toBe(2)
+      expect(await callsAfter(4_000)).toBe(3)
+      expect(await callsAfter(7_999)).toBe(3)
+      expect(await callsAfter(1)).toBe(4)
+    })
+
+    it('still signs out on a definite answer: 401 after an outage', async () => {
+      vi.useFakeTimers()
+      fetchMock.mockResolvedValueOnce(rateLimited('5')).mockImplementation(async () => unauthenticated())
+      renderProvider()
+      await settle()
+      await act(async () => vi.advanceTimersByTimeAsync(5_000))
+      expect(status()).toBe('unauthenticated:-:fast')
+      expect(latest.current!.unavailable).toBeNull()
+    })
+
+    it('a 429 on login leaves the auth state unchanged (no sign-in, no sign-out)', async () => {
+      fetchMock.mockResolvedValueOnce(unauthenticated())
+      renderProvider()
+      await settle()
+      fetchMock.mockResolvedValueOnce(rateLimited('600'))
+      await act(async () => {
+        await expect(auth.login({ email: 'alex@example.com', password: 'pw pw pw pw pw' })).rejects.toMatchObject({
+          status: 429,
+          retryAfterSeconds: 600,
+        })
+      })
+      expect(status()).toBe('unauthenticated:-:fast')
+    })
+  })
 })

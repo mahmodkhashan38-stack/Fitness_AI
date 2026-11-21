@@ -20,6 +20,8 @@ interface ApiErrorDetails {
   status?: number
   /** Parsed JSON or text of an error response (HTTP errors only). */
   body?: unknown
+  /** Seconds the server asked the client to wait (Retry-After header, HTTP errors only). */
+  retryAfterSeconds?: number
   cause?: unknown
 }
 
@@ -33,8 +35,9 @@ export class ApiError extends Error {
   readonly path?: string
   readonly status?: number
   readonly body?: unknown
+  readonly retryAfterSeconds?: number
 
-  constructor({ kind, message, method, path, status, body, cause }: ApiErrorDetails) {
+  constructor({ kind, message, method, path, status, body, retryAfterSeconds, cause }: ApiErrorDetails) {
     super(message, cause === undefined ? undefined : { cause })
     this.name = 'ApiError'
     this.kind = kind
@@ -42,6 +45,7 @@ export class ApiError extends Error {
     this.path = path
     this.status = status
     this.body = body
+    this.retryAfterSeconds = retryAfterSeconds
   }
 
   /** 4xx: a problem with the request (validation, auth, not found). */

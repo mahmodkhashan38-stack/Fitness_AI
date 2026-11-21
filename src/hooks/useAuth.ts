@@ -2,10 +2,23 @@ import type { AuthStatus, AuthUser, LoginCredentials, RegistrationData } from '@
 import type { FitnessProfileInput } from '@/types/fitness-profile'
 import { createStrictContext } from '@/utils/create-strict-context'
 
+/** The session check failed temporarily: neither signed in nor signed out. */
+export interface SessionUnavailability {
+  /** `rate-limited`: HTTP 429. `unreachable`: offline, timeout, 5xx or upstream unavailable. */
+  reason: 'rate-limited' | 'unreachable'
+  /**
+   * Earliest time (epoch ms) the server allows another check (its Retry-After), or null when it
+   * set none (e.g. offline): automatic, online/foreground and manual retries wait until then.
+   */
+  notBefore: number | null
+}
+
 export interface AuthContextValue {
   status: AuthStatus
   /** Set only when status is `authenticated`. */
   user: AuthUser | null
+  /** Why and until when the session can't be verified (status `unavailable` only), else null. */
+  unavailable: SessionUnavailability | null
   /** True while a session check has been running for a few seconds (e.g. server cold start). */
   slow: boolean
   /** Throws ApiError on failure (map with toAuthFormError). */

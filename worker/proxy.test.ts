@@ -164,3 +164,87 @@ describe('parseApiOrigin', () => {
     expect(parseApiOrigin(input)).toBeNull()
   })
 })
+
+describe('upstream responses that are not from the API (FIT-11 hotfix)', () => {
+  const challenge = (status: number, headers: Record<string, string> = {}) =>
+    new Response('<!DOCTYPE html><title>Just a moment...</title><script>window._cf_chl_opt={}</script>', {
+      status,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8', 'Set-Cookie': '__cf_bm=abc; Domain=onrender.com; Path=/', 'CF-Ray': 'a5dec00d4d321d8c-FRA', ...headers },
+    })
+
+  it.each([429, 403, 503, 502])('turns an HTML %i (e.g. a Cloudflare challenge) into JSON 503 UPSTREAM_UNAVAILABLE', async (status) => {
+    mockUpstream(challenge(status))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const response = await worker.fetch(new Request('https://app.example/api/auth/me'), env)
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('retry-after')).toBe('30')
+    expect(await response.json()).toEqual({
+      error: { code: 'UPSTREAM_UNAVAILABLE', message: 'Fitness AI is temporarily unavailable. Please try again in a moment.' },
+    })
+    // The challenge's cookies for onrender.com are never set on the app's origin.
+    expect(response.headers.get('set-cookie')).toBeNull()
+    expect(JSON.parse(warn.mock.calls[0]![0] as string)).toEqual({
+      event: 'upstream_non_api_error',
+      status,
+      cfRay: 'a5dec00d4d321d8c-FRA',
+      path: '/api/auth/me',
+    })
+    warn.mockRestore()
+  })
+
+  it.each([
+    ['120', '120'],
+    ['0', '1'],
+    ['99999', '300'],
+    ['Wed, 21 Oct 2026 07:28:00 GMT', '30'],
+    ['soon', '30'],
+  ])('keeps a sensible upstream Retry-After (%s → %s)', async (value, expected) => {
+    mockUpstream(challenge(503, { 'Retry-After': value }))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const response = await worker.fetch(new Request('https://app.example/api/health'), env)
+    expect(response.headers.get('retry-after')).toBe(expected)
+    vi.restoreAllMocks()
+  })
+
+  it('passes the API’s own JSON 429 through unchanged, with its rate-limit headers', async () => {
+    const body = { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please wait a moment and try again.', requestId: 'r1' } }
+    mockUpstream(
+      Response.json(body, {
+        status: 429,
+        headers: {
+          'Retry-After': '42',
+          RateLimit: '"10-in-15min"; r=0; t=42',
+          'RateLimit-Policy': '"10-in-15min"; q=10; w=900; pk=:abc:',
+          'X-Request-Id': 'r1',
+        },
+      }),
+    )
+    const response = await worker.fetch(new Request('https://app.example/api/auth/login', { method: 'POST', body: '{}' }), env)
+    expect(response.status).toBe(429)
+    expect(response.headers.get('retry-after')).toBe('42')
+    expect(response.headers.get('ratelimit')).toBe('"10-in-15min"; r=0; t=42')
+    expect(response.headers.get('ratelimit-policy')).toBe('"10-in-15min"; q=10; w=900; pk=:abc:')
+    expect(response.headers.get('x-request-id')).toBe('r1')
+    expect(await response.json()).toEqual(body)
+  })
+
+  it.each([
+    [401, { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } }],
+    [403, { error: { code: 'CSRF_REJECTED', message: 'x' } }],
+    [503, { error: { code: 'DATABASE_UNAVAILABLE', message: 'x' } }],
+  ])('passes other API JSON errors through unchanged (%i)', async (status, body) => {
+    mockUpstream(Response.json(body, { status, headers: { 'Set-Cookie': '__Host-fa_session=; Max-Age=0; Path=/; Secure' } }))
+    const response = await worker.fetch(new Request('https://app.example/api/auth/me'), env)
+    expect(response.status).toBe(status)
+    expect(await response.json()).toEqual(body)
+    expect(response.headers.get('set-cookie')).toContain('__Host-fa_session')
+  })
+
+  it('passes successful responses through even if they are not JSON (e.g. 204)', async () => {
+    mockUpstream(new Response(null, { status: 204 }))
+    const response = await worker.fetch(new Request('https://app.example/api/auth/logout', { method: 'POST' }), env)
+    expect(response.status).toBe(204)
+  })
+})

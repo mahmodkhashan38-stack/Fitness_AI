@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { RETRY_DELAYS_MS, SLOW_THRESHOLD_MS } from '@/constants/auth'
-import { AuthContext, type AuthContextValue } from '@/hooks/useAuth'
+import { SLOW_THRESHOLD_MS } from '@/constants/auth'
+import { AuthContext, type AuthContextValue, type SessionUnavailability } from '@/hooks/useAuth'
 import * as authApi from '@/services/api/auth'
 import { isApiError } from '@/services/api/errors'
 import * as fitnessProfileApi from '@/services/api/fitness-profile'
@@ -9,7 +9,12 @@ import type { AuthStatus, AuthUser } from '@/types/auth'
 
 interface AuthState {
   status: AuthStatus
+  /**
+   * The last user the server confirmed. Kept while the session can't be verified
+   * (`unavailable`) so nothing is lost, but only exposed while `authenticated`.
+   */
   user: AuthUser | null
+  unavailable?: SessionUnavailability
 }
 
 /**
@@ -17,16 +22,20 @@ interface AuthState {
  * (GET /api/auth/me), so a session survives page reloads without storing anything in the
  * browser besides the HttpOnly cookie.
  *
- * When the server can't be reached (offline, Render cold start, outage) the status is
- * `unavailable`, not `unauthenticated`: the user isn't sent to the login page just because
- * the network failed. Checks are retried with back-off, immediately when the browser comes
- * back online, and when the app returns to the foreground.
+ * When the session can't be verified (offline, Render cold start, outage, HTTP 429 or the
+ * Worker's 503 UPSTREAM_UNAVAILABLE) the status is `unavailable`: neither signed in nor signed
+ * out. Protected pages are not shown and no user is exposed (a failed check never grants
+ * access), but the user isn't logged out or sent to the login page either. Checks are retried
+ * with bounded exponential back-off, never before the server's Retry-After, and again when the
+ * browser comes back online or the app returns to the foreground (also not before Retry-After).
  */
 function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading', user: null })
   const [slow, setSlow] = useState(false)
   const [checkId, setCheckId] = useState(0)
   const attempts = useRef(0)
+  /** Earliest time (ms) the server allows the next check (Retry-After); 0 when unconstrained. */
+  const notBefore = useRef(0)
   const statusRef = useRef<AuthStatus>('loading')
   useEffect(() => {
     statusRef.current = state.status
@@ -43,14 +52,20 @@ function AuthProvider({ children }: { children: ReactNode }) {
       .fetchCurrentUser({ signal: controller.signal })
       .then((user) => {
         attempts.current = 0
+        notBefore.current = 0
         setState(user ? { status: 'authenticated', user } : { status: 'unauthenticated', user: null })
       })
       .catch((error: unknown) => {
         if (isApiError(error) && error.kind === 'aborted') return
         if (authApi.isTemporaryAuthFailure(error)) {
-          setState((current) => ({ status: 'unavailable', user: current.user }))
-          const delay = RETRY_DELAYS_MS[Math.min(attempts.current, RETRY_DELAYS_MS.length - 1)]
+          const retryAfter = isApiError(error) ? error.retryAfterSeconds : undefined
+          const delay = authApi.sessionRetryDelayMs(attempts.current, retryAfter)
           attempts.current += 1
+          // Only the server's Retry-After (bounded like the delay) blocks earlier retries.
+          notBefore.current = retryAfter !== undefined && retryAfter > 0 ? Date.now() + Math.min(delay, retryAfter * 1000) : 0
+          const reason = isApiError(error) && error.status === 429 ? 'rate-limited' : 'unreachable'
+          const unavailable = { reason, notBefore: notBefore.current || null } as const
+          setState((current) => ({ status: 'unavailable', user: current.user, unavailable }))
           retryTimer = window.setTimeout(refresh, delay)
           return
         }
@@ -72,7 +87,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
   // Reconnect as soon as possible instead of waiting for the next back-off step.
   useEffect(() => {
     const retryIfUnavailable = () => {
-      if (statusRef.current !== 'unavailable') return
+      // The scheduled retry stays in place when the server asked us to wait (Retry-After).
+      if (statusRef.current !== 'unavailable' || Date.now() < notBefore.current) return
       attempts.current = 0
       refresh()
     }
@@ -128,6 +144,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status: state.status,
       user: state.status === 'authenticated' ? state.user : null,
+      unavailable: state.status === 'unavailable' ? (state.unavailable ?? null) : null,
       slow,
       login,
       register,

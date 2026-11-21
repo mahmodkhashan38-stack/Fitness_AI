@@ -98,6 +98,19 @@ describe('LoginForm', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/Can’t reach Fitness AI/)
   })
 
+  it.each([
+    [new ApiError({ kind: 'http', status: 429, body: { error: { code: 'RATE_LIMITED' } }, retryAfterSeconds: 900, message: 'x' }), 'Too many attempts. Please try again in about 15 minutes.'],
+    [httpError(503, { error: { code: 'UPSTREAM_UNAVAILABLE' } }), 'Fitness AI is temporarily unavailable. Please try again in a moment.'],
+    [httpError(429, '<!DOCTYPE html><title>Just a moment...</title>'), 'Fitness AI is receiving too many requests right now. Please wait a moment and try again.'],
+  ])('explains rate limits and upstream outages instead of “Something went wrong” (%#)', async (error, message) => {
+    const router = renderForm('login', createAuthValue({ status: 'unauthenticated', login: vi.fn().mockRejectedValueOnce(error) }))
+    type('Email', 'alex@example.com')
+    type('Password', 'whatever whatever')
+    await submit('Log in')
+    expect(screen.getByRole('alert').textContent).toBe(`Error: ${message}`)
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
   it('shows progress, blocks double submits and mentions a slow server', async () => {
     vi.useFakeTimers()
     let resolve: (user: typeof TEST_USER) => void = () => {}

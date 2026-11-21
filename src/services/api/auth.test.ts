@@ -6,6 +6,7 @@ import {
   logout,
   parseAuthUser,
   register,
+  sessionRetryDelayMs,
   toAuthFormError,
   updateName,
 } from '@/services/api/auth'
@@ -134,5 +135,39 @@ describe('updateName', () => {
       vi.unstubAllGlobals()
       vi.unstubAllEnvs()
     }
+  })
+})
+
+describe('rate limiting and upstream failures (FIT-11 hotfix)', () => {
+  const http = (status: number, body: unknown, retryAfterSeconds?: number) =>
+    new ApiError({ kind: 'http', status, body, retryAfterSeconds, message: 'x' })
+
+  it('a 429 or 5xx on the session check is temporary (not a sign-out); 401 and malformed answers are not', () => {
+    expect(isTemporaryAuthFailure(http(429, { error: { code: 'RATE_LIMITED' } }))).toBe(true)
+    expect(isTemporaryAuthFailure(http(429, '<html>Just a moment...</html>'))).toBe(true)
+    expect(isTemporaryAuthFailure(http(503, { error: { code: 'UPSTREAM_UNAVAILABLE' } }))).toBe(true)
+    expect(isTemporaryAuthFailure(http(401, { error: { code: 'UNAUTHENTICATED' } }))).toBe(false)
+    expect(isTemporaryAuthFailure(http(403, { error: { code: 'FORBIDDEN' } }))).toBe(false)
+    expect(isTemporaryAuthFailure(new ApiError({ kind: 'parse', message: 'x' }))).toBe(false)
+  })
+
+  it('backs off exponentially within bounds and never retries before Retry-After', () => {
+    expect([0, 1, 2, 3, 4, 5, 50].map((attempt) => sessionRetryDelayMs(attempt))).toEqual([2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000])
+    expect(sessionRetryDelayMs(0, 42)).toBe(42_000)
+    expect(sessionRetryDelayMs(4, 5)).toBe(30_000)
+    expect(sessionRetryDelayMs(0, 86_400)).toBe(5 * 60_000)
+    expect(sessionRetryDelayMs(-3)).toBe(2_000)
+  })
+
+  it.each([
+    [http(429, { error: { code: 'RATE_LIMITED' } }, 600), 'Too many attempts. Please try again in about 10 minutes.'],
+    [http(429, { error: { code: 'RATE_LIMITED' } }, 75), 'Too many attempts. Please try again in about a minute.'],
+    [http(429, { error: { code: 'RATE_LIMITED' } }, 20), 'Too many attempts. Please try again in about 20 seconds.'],
+    [http(429, { error: { code: 'RATE_LIMITED' } }), 'Too many attempts. Please wait a few minutes and try again.'],
+    [http(429, '<html>Just a moment...</html>'), 'Fitness AI is receiving too many requests right now. Please wait a moment and try again.'],
+    [http(503, { error: { code: 'UPSTREAM_UNAVAILABLE' } }, 30), 'Fitness AI is temporarily unavailable. Please try again in a moment.'],
+    [http(502, '<html>Bad gateway</html>'), 'Fitness AI is starting up or temporarily unavailable. Please try again in a moment.'],
+  ])('login and registration explain %#', (error, message) => {
+    expect(toAuthFormError(error)).toEqual({ message, fields: {} })
   })
 })
